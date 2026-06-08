@@ -55,6 +55,11 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 static_dir = os.path.join(BASE_DIR, "static")
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
+# Mount faces storage
+faces_dir = os.path.join(BASE_DIR, "storage", "faces")
+os.makedirs(faces_dir, exist_ok=True)
+app.mount("/faces", StaticFiles(directory=faces_dir), name="faces")
+
 # Include frontend pages router
 app.include_router(pages.router)
 

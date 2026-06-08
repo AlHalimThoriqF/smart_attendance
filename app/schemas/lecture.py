@@ -6,6 +6,9 @@ class LectureBase(BaseModel):
     nis: str
     name: str
     gender: str
+    jabatan: Optional[str] = None
+    program_studi: Optional[str] = None
+    jabatan_struktural: Optional[str] = None
     images: Optional[str] = None
 
 class LectureCreate(LectureBase):

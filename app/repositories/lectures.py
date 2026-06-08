@@ -13,9 +13,29 @@ def get_all_lectures(db: Session):
 def get_lecture_by_nis(db: Session, nis: str):
     return db.query(models.Lecture).filter(models.Lecture.nis == nis).first()
 
-def create_lecture(db: Session, nis: str, name: str, gender: str = "Unknown", images: str = None):
-    db_lecture = models.Lecture(nis=nis, name=name, gender=gender, images=images)
+def create_lecture(db: Session, nis: str, name: str, gender: str = "Unknown", jabatan: str = None, program_studi: str = None, jabatan_struktural: str = None, images: str = None):
+    db_lecture = models.Lecture(nis=nis, name=name, gender=gender, jabatan=jabatan, program_studi=program_studi, jabatan_struktural=jabatan_struktural, images=images)
     db.add(db_lecture)
+    db.commit()
+    db.refresh(db_lecture)
+    return db_lecture
+
+def update_lecture(db: Session, db_lecture: models.Lecture, nis: str = None, name: str = None, gender: str = None, jabatan: str = None, program_studi: str = None, jabatan_struktural: str = None, images: str = None):
+    if nis is not None:
+        db_lecture.nis = nis
+    if name is not None:
+        db_lecture.name = name
+    if gender is not None:
+        db_lecture.gender = gender
+    if jabatan is not None:
+        db_lecture.jabatan = jabatan
+    if program_studi is not None:
+        db_lecture.program_studi = program_studi
+    if jabatan_struktural is not None:
+        db_lecture.jabatan_struktural = jabatan_struktural
+    if images is not None:
+        db_lecture.images = images
+        
     db.commit()
     db.refresh(db_lecture)
     return db_lecture

@@ -15,6 +15,9 @@ class Lecture(Base):
     nis: Mapped[str] = mapped_column(String(50), unique=True, nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(150), nullable=False)
     gender: Mapped[str] = mapped_column(String(50), nullable=False)
+    jabatan: Mapped[str] = mapped_column(String(100), nullable=True)
+    program_studi: Mapped[str] = mapped_column(String(150), nullable=True)
+    jabatan_struktural: Mapped[str] = mapped_column(String(150), nullable=True)
     images: Mapped[str] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),

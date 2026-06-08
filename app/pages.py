@@ -22,6 +22,10 @@ async def dashboard_page(request: Request):
 async def cctv_page(request: Request):
     return templates.TemplateResponse(request=request, name="cctv.html", context={"active_page": "cctv"})
 
+@router.get("/lectures", response_class=HTMLResponse)
+async def lectures_page(request: Request):
+    return templates.TemplateResponse(request=request, name="lectures.html", context={"active_page": "lectures"})
+
 @router.get("/logs", response_class=HTMLResponse)
 async def logs_page(request: Request):
     return templates.TemplateResponse(request=request, name="logs.html", context={"active_page": "logs"})
