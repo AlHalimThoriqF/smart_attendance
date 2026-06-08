@@ -1,5 +1,6 @@
 import os
 import pickle
+import warnings
 import numpy as np
 import cv2
 from insightface.app import FaceAnalysis
@@ -16,38 +17,43 @@ face_analysis = None
 label_encoder = None
 
 def initialize_models():
+    # Menginisialisasi model InsightFace, SVM, dan Label Encoder ke dalam memori.
     global svm_model, face_analysis, label_encoder
     
-    try:
-        face_analysis = FaceAnalysis(
-            name='buffalo_sc',
-            providers=['CUDAExecutionProvider', 'CPUExecutionProvider']
-        )
-        face_analysis.prepare(ctx_id=0, det_size=(640, 640))
-        print("InsightFace initialized successfully with execution providers.")
-    except Exception as e:
-        print(f"Error initializing InsightFace: {e}")
-        pass
-
-    if os.path.exists(MODEL_PATH):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        
         try:
-            with open(MODEL_PATH, "rb") as f:
-                svm_model = pickle.load(f)
-            print("Pre-trained SVM model loaded successfully from disk.")
+            face_analysis = FaceAnalysis(
+                name='buffalo_sc',
+                providers=['CUDAExecutionProvider', 'CPUExecutionProvider']
+            )
+            face_analysis.prepare(ctx_id=0, det_size=(640, 640))
+            print("InsightFace initialized successfully with execution providers.")
         except Exception as e:
-            print(f"Error loading SVM model from {MODEL_PATH}: {e}")
-    else:
-        print(f"SVM model not found at {MODEL_PATH}. Face recognition will only draw bounding boxes without names.")
+            print(f"Error initializing InsightFace: {e}")
+            pass
 
-    if os.path.exists(LABEL_ENCODER_PATH):
-        try:
-            with open(LABEL_ENCODER_PATH, "rb") as f:
-                label_encoder = pickle.load(f)
-            print("Label Encoder loaded successfully from disk.")
-        except Exception as e:
-            print(f"Error loading Label Encoder from {LABEL_ENCODER_PATH}: {e}")
+        if os.path.exists(MODEL_PATH):
+            try:
+                with open(MODEL_PATH, "rb") as f:
+                    svm_model = pickle.load(f)
+                print("Pre-trained SVM model loaded successfully from disk.")
+            except Exception as e:
+                print(f"Error loading SVM model from {MODEL_PATH}: {e}")
+        else:
+            print(f"SVM model not found at {MODEL_PATH}. Face recognition will only draw bounding boxes without names.")
+
+        if os.path.exists(LABEL_ENCODER_PATH):
+            try:
+                with open(LABEL_ENCODER_PATH, "rb") as f:
+                    label_encoder = pickle.load(f)
+                print("Label Encoder loaded successfully from disk.")
+            except Exception as e:
+                print(f"Error loading Label Encoder from {LABEL_ENCODER_PATH}: {e}")
 
 def predict_frame(img):
+    # Memproses frame gambar untuk mendeteksi wajah dan memprediksi identitasnya.
     global svm_model, face_analysis, label_encoder
     
     if face_analysis is None:

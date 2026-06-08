@@ -8,7 +8,6 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from app.ai.recognition import predict_frame
 from app.database.database import SessionLocal
 from app import repositories
-from app.ai.tracker import FaceTracker
 
 class CameraStream:
     def __init__(self, rtsp_url):

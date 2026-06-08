@@ -5,25 +5,27 @@ import base64
 from app.database.database import SessionLocal
 from app import repositories
 from app.ai.recognition import predict_frame
-from app.ai.tracker import FaceTracker
+
 
 class CameraStreamReader:
     def __init__(self, rtsp_url):
-        self.cap = cv2.VideoCapture(rtsp_url)
+        # Inisialisasi koneksi ke stream RTSP dan mulai thread pembacaan frame.
+        self.kamera = cv2.VideoCapture(rtsp_url)
         self.ret = False
         self.frame = None
         self.running = True
         
-        if self.cap.isOpened():
-            self.ret, self.frame = self.cap.read()
+        if self.kamera.isOpened():
+            self.ret, self.frame = self.kamera.read()
             self.thread = threading.Thread(target=self.update, args=())
             self.thread.daemon = True
             self.thread.start()
 
     def update(self):
+        # Terus membaca frame dari stream kamera selama thread berjalan
         while self.running:
-            if self.cap.isOpened():
-                ret, frame = self.cap.read()
+            if self.kamera.isOpened():
+                ret, frame = self.kamera.read()
                 if ret:
                     self.ret = ret
                     self.frame = frame
@@ -33,24 +35,30 @@ class CameraStreamReader:
                 time.sleep(1)
 
     def read(self):
+        # Mengembalikan status pembacaan dan frame terbaru
         return self.ret, self.frame
         
     def release(self):
+        # Menghentikan thread pembacaan dan melepaskan koneksi kamera.
         self.running = False
         if hasattr(self, 'thread'):
             self.thread.join(timeout=1.0)
-        self.cap.release()
+        self.kamera.release()
 
 class BackgroundMonitorManager:
     def __init__(self):
+        # Inisialisasi penyimpanan thread, event stop, dan frame terbaru untuk tiap CCTV.
         self.active_threads = {}
         self.stop_events = {}
-        self.latest_frames = {}  # cctv_id -> base64 string
+        self.latest_frames = {} 
+        self.last_logged = {} # Menyimpan waktu terakhir log untuk tiap (cctv_id, lecture_id)
 
     def get_latest_frame(self, cctv_id):
+        # Mengambil frame terbaru dari CCTV tertentu yang sudah di-encode base64.
         return self.latest_frames.get(cctv_id)
 
     def start_camera(self, cctv_id, rtsp_url):
+        # Memulai proses monitoring background untuk satu kamera pada thread terpisah.
         if cctv_id in self.active_threads:
             return # Already running
             
@@ -67,6 +75,7 @@ class BackgroundMonitorManager:
         print(f"Background monitoring started for CCTV {cctv_id}")
 
     def stop_camera(self, cctv_id):
+        # Menghentikan proses monitoring background untuk kamera tertentu.
         if cctv_id in self.stop_events:
             self.stop_events[cctv_id].set()
             if cctv_id in self.active_threads:
@@ -76,6 +85,7 @@ class BackgroundMonitorManager:
             print(f"Background monitoring stopped for CCTV {cctv_id}")
 
     def start_all(self):
+        # Memulai monitoring background untuk semua kamera yang berstatus aktif di database.
         db = SessionLocal()
         try:
             cameras = repositories.cctv.get_all_cctvs(db)
@@ -89,9 +99,9 @@ class BackgroundMonitorManager:
             db.close()
 
     def _camera_worker(self, cctv_id, rtsp_url, stop_event):
+        # Worker utama untuk membaca stream, melakukan deteksi wajah, tracking, dan logging.
         db = SessionLocal()
         stream_obj = CameraStreamReader(rtsp_url)
-        tracker = FaceTracker()
         
         try:
             while not stop_event.is_set():
@@ -107,28 +117,13 @@ class BackgroundMonitorManager:
                 except Exception as e:
                     print(f"AI prediction error on camera {cctv_id}: {e}")
 
-                # Prepare data for tracker
-                rects = []
-                current_names = []
-                current_user_ids = []
-                current_confidences = []
                 for face in faces_detected:
-                    if face.get("box"):
-                        x1, y1, x2, y2 = face.get("box")
-                        rects.append((x1, y1, x2, y2))
-                        current_names.append(face.get("name", "Unknown"))
-                        current_user_ids.append(face.get("user_id"))
-                        current_confidences.append(face.get("confidence", 0.0))
-
-                smoothed_names, smoothed_user_ids, smoothed_confidences = tracker.update(
-                    rects, current_names, current_user_ids, current_confidences
-                )
-
-                for i, rect in enumerate(rects):
-                    user_id = smoothed_user_ids[i]
-                    confidence = smoothed_confidences[i]
-                    name_label = smoothed_names[i]
-                    x1, y1, x2, y2 = rect
+                    if not face.get("box"):
+                        continue
+                    x1, y1, x2, y2 = face.get("box")
+                    user_id = face.get("user_id")
+                    confidence = face.get("confidence", 0.0)
+                    name_label = face.get("name", "Unknown")
                     
                     lecture = None
                     if user_id:
@@ -137,8 +132,14 @@ class BackgroundMonitorManager:
                         lecture = repositories.lectures.get_lecture_by_nis(db, name_label)
                         
                     if lecture:
-                        # Log to DB
-                        repositories.lectures.create_detection_log(db, cctv_id, lecture.id, confidence)
+                        # Log to DB dengan cooldown pendek (5 detik) agar last_seen terasa realtime
+                        # namun tetap mencegah spam ke database pada 30 FPS.
+                        current_time = time.time()
+                        last_time = self.last_logged.get((cctv_id, lecture.id), 0)
+                        if current_time - last_time > 5: # 5 detik
+                            repositories.lectures.create_detection_log(db, cctv_id, lecture.id, confidence)
+                            self.last_logged[(cctv_id, lecture.id)] = current_time
+                            
                         name_label = lecture.name
 
                     color = (0, 0, 255) if name_label.lower() == "unknown" else (0, 255, 0)
@@ -159,7 +160,6 @@ class BackgroundMonitorManager:
                     base64_image = base64.b64encode(jpeg_bytes).decode('utf-8')
                     self.latest_frames[cctv_id] = base64_image
                 
-                # Small sleep to prevent 100% CPU
                 time.sleep(0.03)
                 
         finally:

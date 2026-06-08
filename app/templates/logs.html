@@ -21,7 +21,8 @@
             <table class="w-full text-left border-collapse">
                 <thead>
                     <tr class="border-b border-slate-200 bg-slate-50">
-                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Time</th>
+                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">First Seen</th>
+                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Last Seen</th>
                         <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Subject</th>
                         <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Camera</th>
                         <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Confidence</th>
@@ -30,7 +31,7 @@
                 </thead>
                 <tbody id="logs-table-body" class="divide-y divide-slate-100">
                     <tr>
-                        <td colspan="5" class="px-6 py-8 text-center text-slate-500 font-medium">Loading...</td>
+                        <td colspan="6" class="px-6 py-8 text-center text-slate-500 font-medium">Loading...</td>
                     </tr>
                 </tbody>
             </table>
@@ -61,12 +62,12 @@
     async function fetchLogs() {
         try {
             const data = await apiFetch('/detection-logs');
-            allLogs = data.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            allLogs = data.sort((a, b) => new Date(b.last_seen) - new Date(a.last_seen));
             logsCurrentPage = 1;
             renderLogsTable();
         } catch (e) {
             console.error(e);
-            document.getElementById('logs-table-body').innerHTML = `<tr><td colspan="5" class="px-6 py-8 text-center text-red-500 font-medium">Failed to load logs</td></tr>`;
+            document.getElementById('logs-table-body').innerHTML = `<tr><td colspan="6" class="px-6 py-8 text-center text-red-500 font-medium">Failed to load logs</td></tr>`;
         }
     }
 
@@ -75,7 +76,7 @@
         tbody.innerHTML = '';
 
         if (allLogs.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-8 text-center text-slate-500 font-medium">No detection logs found</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-8 text-center text-slate-500 font-medium">No detection logs found</td></tr>';
             document.getElementById('logs-pagination').classList.add('hidden');
             return;
         }
@@ -93,42 +94,30 @@
             tr.className = "hover:bg-slate-50 transition-colors";
 
             const isUnknown = log.lecture_id === null;
-            const time = new Date(log.first_seen).toLocaleString();
+            const firstSeen = new Date(log.first_seen).toLocaleString();
+            const lastSeen = new Date(log.last_seen).toLocaleString();
 
-            const avatarBg = isUnknown ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600';
-            const iconName = isUnknown ? 'user-x' : 'user';
-            const mainText = isUnknown ? 'Unknown Person' : log.lecture.nis;
-            const subText = !isUnknown ? `<div class="text-xs text-slate-500 mt-0.5">${log.lecture.name}</div>` : '';
+            const mainText = isUnknown ? 'Unknown Person' : log.lecture.name;
+            const subText = !isUnknown ? `<div class="text-xs text-slate-500 mt-0.5">${log.lecture.nis}</div>` : '';
 
-            const confidenceHtml = isUnknown ? '-' : `
-                <div class="flex items-center gap-3">
-                    <div class="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
-                        <div class="h-full bg-emerald-500" style="width: ${log.confidence * 100}%"></div>
-                    </div>
-                    <span class="text-xs font-bold text-slate-600">${(log.confidence * 100).toFixed(1)}%</span>
-                </div>
-            `;
+            const confidenceHtml = isUnknown ? '-' : `<span class="text-sm font-medium text-slate-600">${(log.confidence * 100).toFixed(1)}%</span>`;
 
             const badgeClass = isUnknown
                 ? 'bg-red-50 text-red-700 border-red-200'
                 : 'bg-emerald-50 text-emerald-700 border-emerald-200';
-            const badgeText = isUnknown ? 'Unrecognized' : 'Verified';
+            const badgeText = isUnknown ? 'Tidak Dikenal' : 'Hadir';
 
             tr.innerHTML = `
-                <td class="px-6 py-4 text-sm text-slate-500 font-medium whitespace-nowrap">${time}</td>
+                <td class="px-6 py-4 text-sm text-slate-500 font-medium whitespace-nowrap">${firstSeen}</td>
+                <td class="px-6 py-4 text-sm font-bold text-indigo-600 whitespace-nowrap">${lastSeen}</td>
                 <td class="px-6 py-4">
-                    <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-full ${avatarBg} flex items-center justify-center shrink-0">
-                            <i data-feather="${iconName}" class="w-5 h-5"></i>
-                        </div>
-                        <div>
-                            <div class="text-sm font-bold text-slate-800">${mainText}</div>
-                            ${subText}
-                        </div>
+                    <div>
+                        <div class="text-sm font-bold text-slate-800">${mainText}</div>
+                        ${subText}
                     </div>
                 </td>
                 <td class="px-6 py-4 text-sm font-medium text-slate-600">${log.cctv ? log.cctv.name : `CCTV #${log.cctv_id}`}</td>
-                <td class="px-6 py-4 w-48">${confidenceHtml}</td>
+                <td class="px-6 py-4">${confidenceHtml}</td>
                 <td class="px-6 py-4">
                     <span class="inline-flex px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full border ${badgeClass}">
                         ${badgeText}
@@ -168,7 +157,7 @@
         setInterval(async () => {
             try {
                 const data = await apiFetch('/detection-logs');
-                allLogs = data.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                allLogs = data.sort((a, b) => new Date(b.last_seen) - new Date(a.last_seen));
                 renderLogsTable();
             } catch (e) { }
         }, 10000);

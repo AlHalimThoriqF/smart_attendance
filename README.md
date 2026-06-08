@@ -29,7 +29,7 @@ Sistem ini dibangun menggunakan teknologi berikut:
 ```text
 Smart_Attendance/
 ├── app/
-│   ├── ai/                # Modul AI: Face recognition (InsightFace), tracker, & background monitor
+│   ├── ai/                # Modul AI: Face recognition (InsightFace)& background monitor
 │   ├── api/               # Rute API: Auth, CCTV, Lectures, dan WebSocket Stream
 │   ├── core/              # Konfigurasi keamanan (JWT Token, Hash Password)
 │   ├── database/          # Konfigurasi koneksi Database (SQLAlchemy Engine)

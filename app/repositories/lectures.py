@@ -1,5 +1,7 @@
 import os
+import datetime
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from app import models
 
 FACES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "storage", "faces")
@@ -35,16 +37,35 @@ def get_lecture_by_id(db: Session, lecture_id: int):
     return db.query(models.Lecture).filter(models.Lecture.id == lecture_id).first()
 
 def create_detection_log(db: Session, cctv_id: int, lecture_id: int, confidence: float, status: str = "present"):
-    db_log = models.DetectionLog(
-        cctv_id=cctv_id,
-        lecture_id=lecture_id,
-        confidence=confidence,
-        status=status
-    )
-    db.add(db_log)
-    db.commit()
-    db.refresh(db_log)
-    return db_log
+    # Jika orang yang sama terekam di kamera yang sama dan belum lewat dari 30 menit sejak terakhir terlihat,
+    # maka gabungkan ke dalam log yang sama (sesi yang sama).
+    session_timeout = datetime.datetime.now() - datetime.timedelta(minutes=30)
+    
+    existing_log = db.query(models.DetectionLog).filter(
+        models.DetectionLog.cctv_id == cctv_id,
+        models.DetectionLog.lecture_id == lecture_id,
+        models.DetectionLog.last_seen >= session_timeout
+    ).order_by(models.DetectionLog.last_seen.desc()).first()
+
+    if existing_log:
+        existing_log.last_seen = func.now()
+        # Perbarui nilai confidence jika deteksi baru lebih akurat
+        if confidence > existing_log.confidence:
+            existing_log.confidence = confidence
+        db.commit()
+        db.refresh(existing_log)
+        return existing_log
+    else:
+        db_log = models.DetectionLog(
+            cctv_id=cctv_id,
+            lecture_id=lecture_id,
+            confidence=confidence,
+            status=status
+        )
+        db.add(db_log)
+        db.commit()
+        db.refresh(db_log)
+        return db_log
 
 def get_all_logs(db: Session):
     return db.query(models.DetectionLog).order_by(models.DetectionLog.first_seen.desc()).all()
