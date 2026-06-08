@@ -18,6 +18,9 @@ Thumbs.db
 
 alembic/
 
+# SQLite Database
+smart_attendance.db
+
 app/storage/snapshots/* 
 app/storage/faces/* 
 

@@ -1,30 +1,29 @@
 import os
 from dotenv import load_dotenv
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 # Load environment variables from .env
 load_dotenv()
 
-# Get Database URL from environment or fall back to local MySQL development setup
-DB_CONNECTION = os.getenv("DB_CONNECTION")
-DB_HOST = os.getenv("DB_HOST")
-DB_PORT = os.getenv("DB_PORT")
-DB_DATABASE = os.getenv("DB_DATABASE")
-DB_USERNAME = os.getenv("DB_USERNAME")
-DB_PASSWORD = os.getenv("DB_PASSWORD")
-
-DATABASE_URL = f"{DB_CONNECTION}+pymysql://{DB_USERNAME}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_DATABASE}"
+# Gunakan SQLite secara paksa untuk aplikasi portabel
+DATABASE_URL = "sqlite:///./smart_attendance.db"
 
 # Create SQLAlchemy engine
-# pool_pre_ping=True is crucial for detecting and recovering from dropped connections or idle timeouts
+# connect_args={"check_same_thread": False} diperlukan oleh SQLite jika digunakan di multi-threading (seperti AI Background Monitor)
 engine = create_engine(
     DATABASE_URL,
-    pool_pre_ping=True,
-    pool_recycle=3600,
-    pool_size=10,
-    max_overflow=20
+    connect_args={"check_same_thread": False}
 )
+
+# Event Listener untuk mengaktifkan mode WAL (Write-Ahead Logging) di SQLite
+# WAL mode mencegah error "database is locked" saat beberapa thread mencoba menulis ke SQLite secara bersamaan
+@event.listens_for(engine, "connect")
+def set_sqlite_pragma(dbapi_connection, connection_record):
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA synchronous=NORMAL")
+    cursor.close()
 
 # Configure the sessionmaker
 SessionLocal = sessionmaker(

@@ -110,14 +110,19 @@ class BackgroundMonitorManager:
         db = SessionLocal()
         stream_obj = CameraStreamReader(rtsp_url)
         
+        last_ai_time = 0
+        cached_valid_detections = []
+        cached_faces_detected = []
+        
         try:
             while not stop_event.is_set():
                 ret, frame = stream_obj.read()
                 if not ret or frame is None:
-                    time.sleep(0.05)
+                    time.sleep(0.01)
                     continue
                 
                 frame_copy = frame.copy()
+                current_time = time.time()
                 
                 # Add timestamp watermark
                 now = datetime.datetime.now()
@@ -127,43 +132,57 @@ class BackgroundMonitorManager:
                 month_name = months[now.month - 1]
                 timestamp_str = f"{day_name}, {now.day:02d} {month_name} {now.year} - {now.strftime('%H:%M:%S')} WIB"
                 
-                # Posisi pojok kiri atas
                 text_x = 15
                 text_y = 30
-                
-                # Draw outline
                 cv2.putText(frame_copy, timestamp_str, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 3)
-                # Draw text
                 cv2.putText(frame_copy, timestamp_str, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-                faces_detected = []
-                try:
-                    faces_detected = predict_frame(frame_copy)
-                except Exception as e:
-                    print(f"AI prediction error on camera {cctv_id}: {e}")
+                
+                # AI Inference (Throttled to 2 FPS)
+                if current_time - last_ai_time >= 0.5:
+                    try:
+                        cached_faces_detected = predict_frame(frame_copy)
+                    except Exception as e:
+                        print(f"AI prediction error on camera {cctv_id}: {e}")
+                    
+                    last_ai_time = current_time
+                    valid_detections = []
+                    
+                    for face in cached_faces_detected:
+                        if not face.get("box"):
+                            continue
+                        user_id = face.get("user_id")
+                        name_label = face.get("name", "Unknown")
+                        confidence = face.get("confidence", 0.0)
+                        
+                        lecture = None
+                        if user_id:
+                            lecture = repositories.lectures.get_lecture_by_id(db, user_id)
+                        elif name_label.lower() != "unknown":
+                            lecture = repositories.lectures.get_lecture_by_name(db, name_label)
+                            
+                        if lecture:
+                            name_label = lecture.name
+                            valid_detections.append({
+                                "lecture": lecture,
+                                "confidence": confidence,
+                                "box": face.get("box"),
+                                "name": name_label
+                            })
+                    cached_valid_detections = valid_detections
 
-                # Pass 1: Gather valid detected lectures and draw all boxes
-                valid_detections = []
-                for face in faces_detected:
+                # Realtime display using cached detections
+                for face in cached_faces_detected:
                     if not face.get("box"):
                         continue
                     x1, y1, x2, y2 = face.get("box")
-                    user_id = face.get("user_id")
-                    confidence = face.get("confidence", 0.0)
-                    name_label = face.get("name", "Unknown")
                     
-                    lecture = None
-                    if user_id:
-                        lecture = repositories.lectures.get_lecture_by_id(db, user_id)
-                    elif name_label.lower() != "unknown":
-                        lecture = repositories.lectures.get_lecture_by_name(db, name_label)
-                        
-                    if lecture:
-                        name_label = lecture.name
-                        valid_detections.append({
-                            "lecture": lecture,
-                            "confidence": confidence
-                        })
-
+                    name_label = face.get("name", "Unknown")
+                    for vd in cached_valid_detections:
+                        if vd["box"] == face.get("box"):
+                            name_label = vd["name"]
+                            break
+                            
+                    confidence = face.get("confidence", 0.0)
                     color = (0, 0, 255) if name_label.lower() == "unknown" else (0, 255, 0)
                     cv2.rectangle(frame_copy, (x1, y1), (x2, y2), color, 2)
                     
@@ -176,20 +195,15 @@ class BackgroundMonitorManager:
                     cv2.rectangle(frame_copy, (x1, y1 - 20), (x1 + w, y1), color, -1)
                     cv2.putText(frame_copy, label, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
 
-                # Pass 2: Save snapshot and log to DB
-                current_time = time.time()
+                # Database Logging
                 needs_logging = []
-                
-                for det in valid_detections:
+                for det in cached_valid_detections:
                     lecture = det["lecture"]
-                    
-                    # Cek update log rutin (setiap 3 detik)
                     last_time = self.last_logged.get((cctv_id, lecture.id), 0)
                     if current_time - last_time > 3:
                         needs_logging.append(det)
                         
                 if needs_logging:
-                    # Kita membuat resize 1x saja kalau ada yang butuh di-log
                     height, width = frame_copy.shape[:2]
                     scale = 640 / width
                     new_width, new_height = int(width * scale), int(height * scale)
@@ -202,7 +216,7 @@ class BackgroundMonitorManager:
                         confidence = det["confidence"]
                         
                         last_snap = self.last_snapshot.get((cctv_id, lecture.id), 0)
-                        is_new_session = (current_time - last_snap > 1800) # 30 menit
+                        is_new_session = (current_time - last_snap > 1800)
                         
                         if is_new_session:
                             self.session_uuids[(cctv_id, lecture.id)] = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -214,14 +228,12 @@ class BackgroundMonitorManager:
                         user_snapshot_dir = os.path.join(base_snapshot_dir, folder_name)
                         os.makedirs(user_snapshot_dir, exist_ok=True)
                         
-                        # Selalu ambil Last Seen (overwrite file lama di disk)
                         last_filename = f"{session_uuid}_last.jpg"
                         last_path = os.path.join(user_snapshot_dir, last_filename)
                         cv2.imwrite(last_path, snapshot_frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
                         
                         first_path_db = None
                         if is_new_session:
-                            # Jika sesi baru, buat juga First Seen copy
                             first_filename = f"{session_uuid}_first.jpg"
                             first_path = os.path.join(user_snapshot_dir, first_filename)
                             cv2.imwrite(first_path, snapshot_frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
@@ -243,7 +255,7 @@ class BackgroundMonitorManager:
                     base64_image = base64.b64encode(jpeg_bytes).decode('utf-8')
                     self.latest_frames[cctv_id] = base64_image
                 
-                time.sleep(0.03)
+                time.sleep(0.01)
                 
         finally:
             stream_obj.release()

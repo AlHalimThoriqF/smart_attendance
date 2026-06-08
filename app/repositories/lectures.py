@@ -73,7 +73,7 @@ def create_detection_log(db: Session, cctv_id: int, lecture_id: int, confidence:
     ).order_by(models.DetectionLog.last_seen.desc()).first()
 
     if existing_log:
-        existing_log.last_seen = func.now()
+        existing_log.last_seen = datetime.datetime.now()
         # Perbarui nilai confidence agar selalu mencerminkan deteksi terakhir (Last Seen)
         existing_log.confidence = confidence
         
@@ -85,13 +85,16 @@ def create_detection_log(db: Session, cctv_id: int, lecture_id: int, confidence:
         db.refresh(existing_log)
         return existing_log
     else:
+        now = datetime.datetime.now()
         db_log = models.DetectionLog(
             cctv_id=cctv_id,
             lecture_id=lecture_id,
             confidence=confidence,
             status=status,
             snapshot_path=snapshot_path,
-            last_snapshot_path=last_snapshot_path
+            last_snapshot_path=last_snapshot_path,
+            first_seen=now,
+            last_seen=now
         )
         db.add(db_log)
         db.commit()
