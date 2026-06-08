@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Smart Attendance{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 mb-2">
+        <div>
+            <h1 class="text-2xl font-bold text-slate-800 mb-1">Live Dashboard</h1>
+            <p class="text-slate-500 text-sm">Real-time monitoring </p>
+        </div>
+        <div class="flex items-center gap-3 w-full sm:w-auto">
+            <span class="text-sm font-medium text-slate-700">Pilih Kamera:</span>
+            <select id="cctv-selector"
+                class="px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm text-slate-700 focus:outline-none hidden">
+                <option value="">Loading CCTV...</option>
+            </select>
+            <button id="btn-fullscreen"
+                class="px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-sm font-medium transition-colors"
+                title="Full Screen">
+                Full Screen
+            </button>
+        </div>
+    </div>
+    <div
+        class="w-full aspect-video bg-black rounded-xl relative overflow-hidden flex items-center justify-center">
+
+        <img id="stream-img" src="" class="w-full h-full object-contain hidden" />
+
+        <div id="stream-placeholder" class="text-center text-slate-400 flex flex-col items-center">
+            <div
+                class="w-16 h-16 mb-4 rounded-full bg-slate-800 flex items-center justify-center border border-slate-700 shadow-lg">
+                <i data-feather="loader" class="w-8 h-8 text-orange-500 animate-spin"></i>
+            </div>
+            <p class="text-sm font-medium tracking-wide">Connecting to Camera...</p>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let ws = null;
+
+    async function loadCCTVs() {
+        try {
+            const data = await apiFetch('/cctv');
+            const activeCameras = data.filter(c => c.status);
+
+            const selector = document.getElementById('cctv-selector');
+            selector.classList.remove('hidden');
+            selector.innerHTML = '';
+
+            if (activeCameras.length > 0) {
+                activeCameras.forEach(cctv => {
+                    const opt = document.createElement('option');
+                    opt.value = cctv.id;
+                    opt.textContent = `${cctv.name} (${cctv.location})`;
+                    selector.appendChild(opt);
+                });
+
+                // Auto-start the first active camera
+                selector.value = activeCameras[0].id;
+                startStream(activeCameras[0].id);
+            } else {
+                selector.innerHTML = '<option value="">No Active CCTV</option>';
+                selector.disabled = true;
+                const placeholder = document.getElementById('stream-placeholder');
+                placeholder.innerHTML = `
+                    <i data-feather="video-off" class="w-12 h-12 mb-4 text-red-400 opacity-50"></i>
+                    <p class="text-sm font-medium text-slate-500">No active cameras found</p>
+                `;
+                feather.replace();
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+
+    let frameTimeout;
+
+    function showOffline() {
+        const img = document.getElementById('stream-img');
+        const placeholder = document.getElementById('stream-placeholder');
+        img.classList.add('hidden');
+        placeholder.classList.remove('hidden');
+        placeholder.innerHTML = `
+            <i data-feather="wifi-off" class="w-12 h-12 mb-4 text-red-500 opacity-50"></i>
+            <p class="text-sm font-medium text-slate-500">Camera is Offline</p>
+        `;
+        if (typeof feather !== 'undefined') {
+            feather.replace();
+        }
+    }
+
+    function showLoading() {
+        const img = document.getElementById('stream-img');
+        const placeholder = document.getElementById('stream-placeholder');
+        img.classList.add('hidden');
+        placeholder.classList.remove('hidden');
+        placeholder.innerHTML = `
+            <i data-feather="loader" class="w-12 h-12 mb-4 text-slate-400 animate-spin"></i>
+            <p class="text-sm font-medium text-slate-500">Connecting...</p>
+        `;
+        if (typeof feather !== 'undefined') {
+            feather.replace();
+        }
+    }
+
+    function startStream(cctvId) {
+        if (ws) {
+            ws.close();
+        }
+
+        const img = document.getElementById('stream-img');
+        const placeholder = document.getElementById('stream-placeholder');
+
+        if (!cctvId) {
+            img.classList.add('hidden');
+            placeholder.classList.remove('hidden');
+            return;
+        }
+
+        showLoading();
+
+        // Protocol logic
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        // Connect to WebSocket
+        ws = new WebSocket(`${protocol}//${window.location.host}/ws/stream/${cctvId}`);
+
+        // Set initial timeout to 5 seconds
+        clearTimeout(frameTimeout);
+        frameTimeout = setTimeout(showOffline, 5000);
+
+        ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.base64_image) {
+                    // We got a frame! Clear the offline timeout and set a new one
+                    clearTimeout(frameTimeout);
+                    frameTimeout = setTimeout(showOffline, 3000);
+
+                    img.classList.remove('hidden');
+                    placeholder.classList.add('hidden');
+                    img.src = `data:image/jpeg;base64,${data.base64_image}`;
+                }
+            } catch (e) {
+                console.error("Error parsing WS message", e);
+            }
+        };
+
+        ws.onerror = (e) => {
+            console.error("WS Error", e);
+            showOffline();
+        };
+
+        ws.onclose = () => {
+            console.log("WS Closed");
+            showOffline();
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadCCTVs();
+
+        document.getElementById('cctv-selector').addEventListener('change', (e) => {
+            startStream(e.target.value);
+        });
+
+        document.getElementById('btn-fullscreen').addEventListener('click', () => {
+            const streamImg = document.getElementById('stream-img');
+
+            if (streamImg.classList.contains('hidden')) {
+                alert("Please select a camera first.");
+                return;
+            }
+
+            if (!document.fullscreenElement) {
+                if (streamImg.requestFullscreen) {
+                    streamImg.requestFullscreen();
+                } else if (streamImg.webkitRequestFullscreen) { /* Safari */
+                    streamImg.webkitRequestFullscreen();
+                } else if (streamImg.msRequestFullscreen) { /* IE11 */
+                    streamImg.msRequestFullscreen();
+                }
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                }
+            }
+        });
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+
+{% block title %}Detection Logs - Smart Attendance{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 mb-2">
+        <div>
+            <h1 class="text-2xl font-bold text-slate-800 mb-1">Detection Logs</h1>
+            <p class="text-slate-500 text-sm">History of recognized faces detections</p>
+        </div>
+        <button onclick="fetchLogs()"
+            class="flex items-center gap-2 px-4 py-2 text-slate-600 hover:text-slate-800 bg-white hover:bg-slate-50 border border-slate-200 shadow-sm rounded-lg text-sm font-medium transition-colors">
+            <i data-feather="refresh-cw" class="w-4 h-4"></i>
+            Refresh
+        </button>
+    </div>
+
+    <div class="bg-white border border-slate-200 rounded-l shadow-sm overflow-hidden">
+        <div class="overflow-x-auto w-full">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="border-b border-slate-200 bg-slate-50">
+                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Time</th>
+                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Subject</th>
+                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Camera</th>
+                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Confidence</th>
+                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
+                    </tr>
+                </thead>
+                <tbody id="logs-table-body" class="divide-y divide-slate-100">
+                    <tr>
+                        <td colspan="5" class="px-6 py-8 text-center text-slate-500 font-medium">Loading...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div id="logs-pagination"
+            class="px-6 py-4 border-t border-slate-200 flex items-center justify-between bg-slate-50 hidden">
+            <div class="text-sm text-slate-500" id="logs-pagination-info">
+                Showing 0 to 0 of 0 entries
+            </div>
+            <div class="flex items-center gap-2">
+                <button id="logs-prev-btn"
+                    class="px-3 py-1.5 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">Previous</button>
+                <span id="logs-page-indicator" class="text-sm font-medium text-slate-700 px-2">Page 1</span>
+                <button id="logs-next-btn"
+                    class="px-3 py-1.5 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">Next</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let allLogs = [];
+    let logsCurrentPage = 1;
+    const logsPerPage = 10;
+
+    async function fetchLogs() {
+        try {
+            const data = await apiFetch('/detection-logs');
+            allLogs = data.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            logsCurrentPage = 1;
+            renderLogsTable();
+        } catch (e) {
+            console.error(e);
+            document.getElementById('logs-table-body').innerHTML = `<tr><td colspan="5" class="px-6 py-8 text-center text-red-500 font-medium">Failed to load logs</td></tr>`;
+        }
+    }
+
+    function renderLogsTable() {
+        const tbody = document.getElementById('logs-table-body');
+        tbody.innerHTML = '';
+
+        if (allLogs.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-8 text-center text-slate-500 font-medium">No detection logs found</td></tr>';
+            document.getElementById('logs-pagination').classList.add('hidden');
+            return;
+        }
+
+        document.getElementById('logs-pagination').classList.remove('hidden');
+
+        const totalPages = Math.ceil(allLogs.length / logsPerPage);
+        const startIndex = (logsCurrentPage - 1) * logsPerPage;
+        const endIndex = Math.min(startIndex + logsPerPage, allLogs.length);
+
+        const paginatedData = allLogs.slice(startIndex, endIndex);
+
+        paginatedData.forEach(log => {
+            const tr = document.createElement('tr');
+            tr.className = "hover:bg-slate-50 transition-colors";
+
+            const isUnknown = log.lecture_id === null;
+            const time = new Date(log.first_seen).toLocaleString();
+
+            const avatarBg = isUnknown ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600';
+            const iconName = isUnknown ? 'user-x' : 'user';
+            const mainText = isUnknown ? 'Unknown Person' : log.lecture.nis;
+            const subText = !isUnknown ? `<div class="text-xs text-slate-500 mt-0.5">${log.lecture.name}</div>` : '';
+
+            const confidenceHtml = isUnknown ? '-' : `
+                <div class="flex items-center gap-3">
+                    <div class="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div class="h-full bg-emerald-500" style="width: ${log.confidence * 100}%"></div>
+                    </div>
+                    <span class="text-xs font-bold text-slate-600">${(log.confidence * 100).toFixed(1)}%</span>
+                </div>
+            `;
+
+            const badgeClass = isUnknown
+                ? 'bg-red-50 text-red-700 border-red-200'
+                : 'bg-emerald-50 text-emerald-700 border-emerald-200';
+            const badgeText = isUnknown ? 'Unrecognized' : 'Verified';
+
+            tr.innerHTML = `
+                <td class="px-6 py-4 text-sm text-slate-500 font-medium whitespace-nowrap">${time}</td>
+                <td class="px-6 py-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full ${avatarBg} flex items-center justify-center shrink-0">
+                            <i data-feather="${iconName}" class="w-5 h-5"></i>
+                        </div>
+                        <div>
+                            <div class="text-sm font-bold text-slate-800">${mainText}</div>
+                            ${subText}
+                        </div>
+                    </div>
+                </td>
+                <td class="px-6 py-4 text-sm font-medium text-slate-600">${log.cctv ? log.cctv.name : `CCTV #${log.cctv_id}`}</td>
+                <td class="px-6 py-4 w-48">${confidenceHtml}</td>
+                <td class="px-6 py-4">
+                    <span class="inline-flex px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full border ${badgeClass}">
+                        ${badgeText}
+                    </span>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+        feather.replace();
+
+        document.getElementById('logs-pagination-info').textContent = `Showing ${startIndex + 1} to ${endIndex} of ${allLogs.length} entries`;
+        document.getElementById('logs-page-indicator').textContent = `Page ${logsCurrentPage} of ${totalPages}`;
+
+        document.getElementById('logs-prev-btn').disabled = logsCurrentPage === 1;
+        document.getElementById('logs-next-btn').disabled = logsCurrentPage === totalPages;
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        fetchLogs();
+
+        document.getElementById('logs-prev-btn').addEventListener('click', () => {
+            if (logsCurrentPage > 1) {
+                logsCurrentPage--;
+                renderLogsTable();
+            }
+        });
+
+        document.getElementById('logs-next-btn').addEventListener('click', () => {
+            const totalPages = Math.ceil(allLogs.length / logsPerPage);
+            if (logsCurrentPage < totalPages) {
+                logsCurrentPage++;
+                renderLogsTable();
+            }
+        });
+
+        // Auto refresh every 10 seconds, maintaining current page
+        setInterval(async () => {
+            try {
+                const data = await apiFetch('/detection-logs');
+                allLogs = data.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                renderLogsTable();
+            } catch (e) { }
+        }, 10000);
+    });
+</script>
+{% endblock %}

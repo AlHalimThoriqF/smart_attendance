@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Marquee Display</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
+        rel="stylesheet">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Feather Icons -->
+    <script src="https://unpkg.com/feather-icons"></script>
+</head>
+
+<body class="bg-slate-50 text-slate-900 overflow-hidden font-sans flex flex-col h-screen">
+    <!-- Header -->
+    <div class="p-6 border-b-4 border-orange-500 flex justify-between items-center bg-white shadow-md z-10">
+        <div class="flex items-center gap-4">
+            <img src="/static/FTIK-USM-Color.png" alt="Logo" class="h-12 w-auto object-contain" />
+            <h1 class="text-3xl font-bold tracking-widest text-slate-800 border-l border-slate-300 pl-4 ml-2">MONITORING
+            </h1>
+        </div>
+        <div class="flex items-center gap-6">
+            <div class="flex items-center gap-6 text-3xl font-bold tracking-wide">
+                <div id="date" class="text-slate-800 uppercase">MEMUAT TANGGAL...</div>
+                <div class="text-slate-300 font-light">|</div>
+                <div id="clock" class="text-orange-500 tabular-nums">00:00:00</div>
+            </div>
+            <button id="btn-fullscreen"
+                class="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all shadow-sm flex items-center justify-center cursor-pointer"
+                title="Toggle Fullscreen">
+                <i id="fullscreen-icon" data-feather="maximize" class="w-6 h-6"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Display Body Container -->
+    <div class="flex-1 flex flex-col bg-slate-50 overflow-hidden relative">
+        <div class="w-full overflow-hidden flex flex-col h-full border border-slate-200 rounded-2xl shadow-lg bg-white">
+            <!-- Fixed Table Header -->
+            <table class="w-full text-left border-collapse table-fixed z-20 bg-slate-100">
+                <thead>
+                    <tr class="border-b border-slate-200">
+                        <th class="w-28 py-6 text-2xl font-black text-slate-700 uppercase tracking-wider text-center">NO
+                        </th>
+                        <th class="py-6 px-6 text-2xl font-black text-slate-700 uppercase tracking-wider">NAMA</th>
+                        <th
+                            class="w-1/3 py-6 px-6 text-2xl font-black text-slate-700 uppercase tracking-wider text-center">
+                            NIS</th>
+                    </tr>
+                </thead>
+            </table>
+
+            <!-- Scrolling Rows -->
+            <div class="flex-1 overflow-hidden relative bg-white">
+                <!-- Subtle gradient overlays for smooth scrolling fade effect at top and bottom boundaries -->
+                <div
+                    class="absolute left-0 right-0 top-0 h-12 bg-gradient-to-b from-white to-transparent z-10 pointer-events-none">
+                </div>
+                <div
+                    class="absolute left-0 right-0 bottom-0 h-12 bg-gradient-to-t from-white to-transparent z-10 pointer-events-none">
+                </div>
+
+                <marquee direction="up" scrollamount="3" class="h-full w-full" behavior="scroll" loop="infinite">
+                    <table class="w-full text-left border-collapse table-fixed">
+                        <tbody id="users-table-body" class="divide-y divide-slate-200">
+                            <tr>
+                                <td colspan="3" class="px-6 py-12 text-center text-2xl font-bold text-slate-400">
+                                    LOADING DATA...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </marquee>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Update clock and date
+        function updateDateTime() {
+            const now = new Date();
+            // Format time: hh.mm.ss or hh:mm:ss
+            document.getElementById('clock').textContent = now.toLocaleTimeString('id-ID');
+
+            // Format date: Hari, Tanggal Bulan Tahun (e.g. Senin, 8 Juni 2026)
+            const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+            document.getElementById('date').textContent = now.toLocaleDateString('id-ID', options);
+        }
+        setInterval(updateDateTime, 1000);
+        updateDateTime();
+
+        async function loadUsers() {
+            try {
+                const res = await fetch('/api/users');
+                if (!res.ok) throw new Error('Failed to fetch');
+                const data = await res.json();
+
+                const tbody = document.getElementById('users-table-body');
+                if (data && data.length > 0) {
+                    const html = data.map((u, index) => `
+                        <tr class="hover:bg-slate-50 transition-colors">
+                            <td class="w-28 py-8 text-3xl font-bold text-slate-500 text-center">${index + 1}</td>
+                            <td class="px-6 py-8 text-3xl font-black text-slate-800 uppercase">${u.name}</td>
+                            <td class="w-1/3 py-8 px-6 text-3xl font-extrabold text-orange-600 text-center">${u.nis || u.identifier || u.nim}</td>
+                        </tr>
+                    `).join('');
+
+                    tbody.innerHTML = html;
+                } else {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="3" class="px-6 py-12 text-center text-3xl font-bold text-slate-400">
+                                TIDAK ADA DATA PENGGUNA TERDAFTAR
+                            </td>
+                        </tr>
+                    `;
+                }
+            } catch (e) {
+                console.error(e);
+                const tbody = document.getElementById('users-table-body');
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="3" class="px-6 py-12 text-center text-3xl font-bold text-red-500">
+                            GAGAL MEMUAT DATA PENGGUNA
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+
+        loadUsers();
+        // refresh data every minute
+        setInterval(loadUsers, 60000);
+
+        // Initial replacement for feather icons
+        feather.replace();
+
+        // Fullscreen API Logic
+        const fullscreenBtn = document.getElementById('btn-fullscreen');
+
+        function updateFullscreenIcon() {
+            const icon = document.getElementById('fullscreen-icon');
+            if (document.fullscreenElement) {
+                icon.setAttribute('data-feather', 'minimize');
+            } else {
+                icon.setAttribute('data-feather', 'maximize');
+            }
+            feather.replace();
+        }
+
+        fullscreenBtn.addEventListener('click', () => {
+            if (!document.fullscreenElement) {
+                if (document.documentElement.requestFullscreen) {
+                    document.documentElement.requestFullscreen();
+                } else if (document.documentElement.webkitRequestFullscreen) { /* Safari */
+                    document.documentElement.webkitRequestFullscreen();
+                } else if (document.documentElement.msRequestFullscreen) { /* IE11 */
+                    document.documentElement.msRequestFullscreen();
+                }
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                } else if (document.msExitFullscreen) {
+                    document.msExitFullscreen();
+                }
+            }
+        });
+
+        document.addEventListener('fullscreenchange', updateFullscreenIcon);
+        document.addEventListener('webkitfullscreenchange', updateFullscreenIcon);
+        document.addEventListener('mozfullscreenchange', updateFullscreenIcon);
+        document.addEventListener('MSFullscreenChange', updateFullscreenIcon);
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+
+{% block title %}CCTV Configuration - Smart Attendance{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 mb-2">
+        <div>
+            <h1 class="text-2xl font-bold text-slate-800 mb-1">CCTV Configuration</h1>
+            <p class="text-slate-500 text-sm">Manage cameras connection for the system</p>
+        </div>
+        <button onclick="openModal()"
+            class="flex items-center gap-2 px-3 py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-sm font-medium shadow-md shadow-orange-600/20 transition-all">
+            <i data-feather="plus" class="w-4 h-4"></i>
+            Add Camera
+        </button>
+    </div>
+
+    <div class="bg-white border border-slate-200 rounded-l shadow-sm overflow-hidden">
+        <div class="overflow-x-auto w-full">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="border-b border-slate-200 bg-slate-50">
+                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">ID</th>
+                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Name</th>
+                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">RTSP URL</th>
+                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Location</th>
+                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">
+                            Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="cctv-table-body" class="divide-y divide-slate-100">
+                    <tr>
+                        <td colspan="5" class="px-6 py-8 text-center text-slate-500 font-medium">Loading...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div id="cctv-pagination" class="px-6 py-4 border-t border-slate-200 flex items-center justify-between bg-slate-50 hidden">
+            <div class="text-sm text-slate-500" id="cctv-pagination-info">
+                Showing 0 to 0 of 0 entries
+            </div>
+            <div class="flex items-center gap-2">
+                <button id="cctv-prev-btn" class="px-3 py-1.5 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">Previous</button>
+                <span id="cctv-page-indicator" class="text-sm font-medium text-slate-700 px-2">Page 1</span>
+                <button id="cctv-next-btn" class="px-3 py-1.5 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">Next</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Overlay -->
+<div id="cctv-modal"
+    class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] items-center justify-center p-4">
+    <div class="w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-2xl p-6">
+        <div class="flex justify-between items-center mb-6">
+            <h2 id="modal-title" class="text-xl font-bold text-slate-800">Add Camera</h2>
+            <button onclick="closeModal()"
+                class="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors">
+                <i data-feather="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+
+        <form id="cctv-form" class="space-y-5">
+            <input type="hidden" id="cctv-id">
+
+            <div>
+                <label for="name" class="block text-sm font-semibold text-slate-700 mb-1.5">Camera Name</label>
+                <input type="text" id="name" required placeholder="e.g., Gate 1"
+                    class="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-all shadow-sm">
+            </div>
+
+            <div>
+                <label for="rtsp_url" class="block text-sm font-semibold text-slate-700 mb-1.5">RTSP URL / Video
+                    Path</label>
+                <input type="text" id="rtsp_url" required placeholder="rtsp://..."
+                    class="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-all shadow-sm">
+            </div>
+
+            <div>
+                <label for="location" class="block text-sm font-semibold text-slate-700 mb-1.5">Location</label>
+                <input type="text" id="location" placeholder="e.g., Main Entrance"
+                    class="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-all shadow-sm">
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4">
+                <button type="button" onclick="closeModal()"
+                    class="px-4 py-2.5 text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl font-semibold transition-colors">Cancel</button>
+                <button type="submit" id="save-btn"
+                    class="px-4 py-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-xl font-semibold shadow-md shadow-orange-600/20 transition-all flex items-center justify-center min-w-[120px]">Save
+                    Camera</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const modal = document.getElementById('cctv-modal');
+    const form = document.getElementById('cctv-form');
+
+    function openModal(cctv = null) {
+        if (cctv) {
+            document.getElementById('modal-title').textContent = 'Edit Camera';
+            document.getElementById('cctv-id').value = cctv.id;
+            document.getElementById('name').value = cctv.name;
+            document.getElementById('rtsp_url').value = cctv.rtsp_url;
+            document.getElementById('location').value = cctv.location || '';
+        } else {
+            document.getElementById('modal-title').textContent = 'Add Camera';
+            form.reset();
+            document.getElementById('cctv-id').value = '';
+        }
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
+
+    function closeModal() {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+        form.reset();
+    }
+
+    let allCCTVs = [];
+    let cctvCurrentPage = 1;
+    const cctvPerPage = 10;
+
+    async function fetchCCTVs() {
+        try {
+            const data = await apiFetch('/cctv');
+            allCCTVs = data;
+            cctvCurrentPage = 1;
+            renderCCTVTable();
+        } catch (e) {
+            console.error(e);
+            document.getElementById('cctv-table-body').innerHTML = `<tr><td colspan="5" class="px-6 py-8 text-center text-red-500 font-medium">Failed to load cameras</td></tr>`;
+        }
+    }
+
+    function renderCCTVTable() {
+        const tbody = document.getElementById('cctv-table-body');
+        tbody.innerHTML = '';
+        
+        if (allCCTVs.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-8 text-center text-slate-500 font-medium">No cameras configured</td></tr>';
+            document.getElementById('cctv-pagination').classList.add('hidden');
+            return;
+        }
+
+        document.getElementById('cctv-pagination').classList.remove('hidden');
+
+        const totalPages = Math.ceil(allCCTVs.length / cctvPerPage);
+        const startIndex = (cctvCurrentPage - 1) * cctvPerPage;
+        const endIndex = Math.min(startIndex + cctvPerPage, allCCTVs.length);
+        
+        const paginatedData = allCCTVs.slice(startIndex, endIndex);
+
+        paginatedData.forEach(item => {
+            const tr = document.createElement('tr');
+            tr.className = "hover:bg-slate-50 transition-colors";
+            tr.innerHTML = `
+                <td class="px-6 py-4 text-sm text-slate-600 font-medium">${item.id}</td>
+                <td class="px-6 py-4 text-sm font-bold text-slate-800">${item.name}</td>
+                <td class="px-6 py-4 text-sm text-slate-500 max-w-xs truncate" title="${item.rtsp_url}">
+                    ${item.rtsp_url}
+                </td>
+                <td class="px-6 py-4 text-sm text-slate-600">${item.location || '-'}</td>
+                <td class="px-6 py-4 text-right flex justify-end gap-2">
+                    <button class="p-2 text-orange-600 hover:text-orange-700 hover:bg-orange-50 rounded-lg transition-colors" onclick='openModal(${JSON.stringify(item).replace(/'/g, "&#39;")})' title="Edit">
+                        <i data-feather="edit-2" class="w-4 h-4"></i>
+                    </button>
+                    <button class="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors" onclick='deleteCCTV(${item.id})' title="Delete">
+                        <i data-feather="trash-2" class="w-4 h-4"></i>
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+        feather.replace();
+
+        document.getElementById('cctv-pagination-info').textContent = `Showing ${startIndex + 1} to ${endIndex} of ${allCCTVs.length} entries`;
+        document.getElementById('cctv-page-indicator').textContent = `Page ${cctvCurrentPage} of ${totalPages}`;
+        
+        document.getElementById('cctv-prev-btn').disabled = cctvCurrentPage === 1;
+        document.getElementById('cctv-next-btn').disabled = cctvCurrentPage === totalPages;
+    }
+
+    async function deleteCCTV(id) {
+        if (!confirm('Are you sure you want to delete this camera?')) return;
+
+        try {
+            await apiFetch(`/cctv/${id}`, { method: 'DELETE' });
+            fetchCCTVs();
+        } catch (e) {
+            alert('Failed to delete camera: ' + e.message);
+        }
+    }
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = document.getElementById('save-btn');
+        const id = document.getElementById('cctv-id').value;
+
+        const payload = {
+            name: document.getElementById('name').value,
+            rtsp_url: document.getElementById('rtsp_url').value,
+            location: document.getElementById('location').value
+        };
+
+        btn.disabled = true;
+        btn.innerHTML = '<div class="loader w-5 h-5 border-2"></div>';
+
+        try {
+            if (id) {
+                await apiFetch(`/cctv/${id}`, {
+                    method: 'PUT',
+                    body: JSON.stringify(payload)
+                });
+            } else {
+                await apiFetch('/cctv', {
+                    method: 'POST',
+                    body: JSON.stringify(payload)
+                });
+            }
+            closeModal();
+            fetchCCTVs();
+        } catch (e) {
+            alert('Error: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = 'Save Camera';
+        }
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
+        fetchCCTVs();
+
+        document.getElementById('cctv-prev-btn').addEventListener('click', () => {
+            if (cctvCurrentPage > 1) {
+                cctvCurrentPage--;
+                renderCCTVTable();
+            }
+        });
+
+        document.getElementById('cctv-next-btn').addEventListener('click', () => {
+            const totalPages = Math.ceil(allCCTVs.length / cctvPerPage);
+            if (cctvCurrentPage < totalPages) {
+                cctvCurrentPage++;
+                renderCCTVTable();
+            }
+        });
+    });
+</script>
+{% endblock %}

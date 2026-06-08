@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Smart Attendance{% endblock %}</title>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Custom CSS (minimal, just for scrollbar) -->
+    <style>
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .loader {
+            border: 3px solid rgba(0, 0, 0, 0.1);
+            border-top: 3px solid #ea580c;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+
+    <!-- Feather Icons -->
+    <script src="https://unpkg.com/feather-icons"></script>
+
+    {% block extra_css %}{% endblock %}
+</head>
+
+<body class="bg-slate-50 text-slate-800 font-sans antialiased h-screen overflow-hidden flex">
+
+    {% block body %}
+    <!-- Sidebar -->
+    <aside id="sidebar"
+        class="w-64 bg-white border-r border-slate-200 flex flex-col transition-transform duration-300 absolute md:relative z-50 h-full -translate-x-full md:translate-x-0 shadow-sm">
+        <div class="p-5 border-b border-orange-700 flex items-center justify-center bg-orange-600 shadow-inner">
+            <img src="/static/FTIK-USM-White.png" alt="Logo FTIK USM" class="h-12 w-auto object-contain" />
+        </div>
+
+        <nav class="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto">
+            <a href="/live"
+                class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all {% if active_page == 'dashboard' %}bg-orange-50 text-orange-600 border border-orange-100 shadow-sm{% else %}text-slate-500 hover:text-slate-800 hover:bg-slate-50 border border-transparent{% endif %}">
+                <i data-feather="monitor" class="w-4 h-4"></i>
+                <span>Live Dashboard</span>
+            </a>
+            <a href="/cctv"
+                class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all {% if active_page == 'cctv' %}bg-orange-50 text-orange-600 border border-orange-100 shadow-sm{% else %}text-slate-500 hover:text-slate-800 hover:bg-slate-50 border border-transparent{% endif %}">
+                <i data-feather="camera" class="w-4 h-4"></i>
+                <span>CCTV Config</span>
+            </a>
+            <a href="/logs"
+                class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all {% if active_page == 'logs' %}bg-orange-50 text-orange-600 border border-orange-100 shadow-sm{% else %}text-slate-500 hover:text-slate-800 hover:bg-slate-50 border border-transparent{% endif %}">
+                <i data-feather="list" class="w-4 h-4"></i>
+                <span>Detection Logs</span>
+            </a>
+        </nav>
+    </aside>
+
+    <!-- Mobile Sidebar Overlay -->
+    <div id="sidebar-overlay" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-40 hidden md:hidden"></div>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col h-full relative overflow-hidden">
+        <header
+            class="h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 flex items-center justify-between px-6 z-10 sticky top-0">
+            <div class="flex items-center gap-4">
+                <button id="sidebar-toggle"
+                    class="md:hidden p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors">
+                    <i data-feather="menu" class="w-5 h-5"></i>
+                </button>
+                <h2 class="hidden sm:block text-xs font-bold text-slate-400 uppercase tracking-widest">
+                    Smart Attendance
+                </h2>
+            </div>
+
+            <div class="flex items-center gap-6">
+                <div class="hidden sm:flex items-center gap-3 border-r border-slate-200 pr-6">
+                    <div class="text-right">
+                        <p class="text-xs font-bold text-slate-700">Admin</p>
+                    </div>
+                </div>
+
+                <button id="logout-btn"
+                    class="flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-red-500 transition-colors">
+                    <i data-feather="log-out" class="w-4 h-4"></i>
+                    <span class="hidden sm:inline">Sign Out</span>
+                </button>
+            </div>
+        </header>
+
+        <div class="flex-1 overflow-y-auto p-6 bg-slate-50">
+            <div class="max-w-7xl mx-auto">
+                {% block content %}{% endblock %}
+            </div>
+        </div>
+    </main>
+    {% endblock %}
+
+    <!-- Custom JS -->
+    <script src="/static/js/main.js"></script>
+
+    <!-- Initialize Icons -->
+    <script>
+        feather.replace();
+
+        // Tailwind specific sidebar toggle override
+        document.addEventListener('DOMContentLoaded', () => {
+            const sidebarBtn = document.getElementById('sidebar-toggle');
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+
+            if (sidebarBtn && sidebar && overlay) {
+                sidebarBtn.addEventListener('click', () => {
+                    sidebar.classList.toggle('-translate-x-full');
+                    overlay.classList.toggle('hidden');
+                });
+
+                overlay.addEventListener('click', () => {
+                    sidebar.classList.add('-translate-x-full');
+                    overlay.classList.add('hidden');
+                });
+            }
+        });
+    </script>
+
+    {% block extra_js %}{% endblock %}
+</body>
+
+</html>
