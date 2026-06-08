@@ -49,6 +49,26 @@ from app.ai.background_monitor import BackgroundMonitor
 
 router = APIRouter(prefix="/ws", tags=["stream"])
 
+@router.websocket("/display")
+async def websocket_display(websocket: WebSocket):
+    await websocket.accept()
+    last_notified = BackgroundMonitor.last_update_time
+    try:
+        while True:
+            if BackgroundMonitor.last_update_time > last_notified:
+                last_notified = BackgroundMonitor.last_update_time
+                await websocket.send_json({"event": "refresh"})
+            await asyncio.sleep(1)
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
+        try:
+            await websocket.close()
+        except Exception:
+            pass
+
 @router.websocket("/stream/{cctv_id}")
 async def websocket_stream(websocket: WebSocket, cctv_id: int):
     await websocket.accept()

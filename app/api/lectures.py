@@ -123,5 +123,5 @@ def delete_lecture(lecture_id: int, db: Session = Depends(get_db), admin=Depends
 
 
 @logs_router.get("", response_model=List[schemas.DetectionLogResponse])
-def get_all_logs(db: Session = Depends(get_db), admin=Depends(get_current_user)):
+def get_all_logs(db: Session = Depends(get_db)):
     return repositories.lectures.get_all_logs(db)

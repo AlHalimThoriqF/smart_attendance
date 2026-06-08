@@ -52,6 +52,7 @@ class BackgroundMonitorManager:
         self.stop_events = {}
         self.latest_frames = {} 
         self.last_logged = {} # Menyimpan waktu terakhir log untuk tiap (cctv_id, lecture_id)
+        self.last_update_time = time.time()
 
     def get_latest_frame(self, cctv_id):
         # Mengambil frame terbaru dari CCTV tertentu yang sudah di-encode base64.
@@ -132,13 +133,14 @@ class BackgroundMonitorManager:
                         lecture = repositories.lectures.get_lecture_by_nis(db, name_label)
                         
                     if lecture:
-                        # Log to DB dengan cooldown pendek (5 detik) agar last_seen terasa realtime
+                        # Log to DB dengan cooldown pendek (3 detik) agar last_seen terasa realtime
                         # namun tetap mencegah spam ke database pada 30 FPS.
                         current_time = time.time()
                         last_time = self.last_logged.get((cctv_id, lecture.id), 0)
-                        if current_time - last_time > 5: # 5 detik
+                        if current_time - last_time > 3: # 5 detik
                             repositories.lectures.create_detection_log(db, cctv_id, lecture.id, confidence)
                             self.last_logged[(cctv_id, lecture.id)] = current_time
+                            self.last_update_time = current_time
                             
                         name_label = lecture.name
 
