@@ -16,5 +16,8 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-alembic/*
+alembic/
+alembic.ini
+alembic.sh
+
 
