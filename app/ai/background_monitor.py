@@ -2,6 +2,10 @@ import threading
 import time
 import cv2
 import base64
+import uuid
+import os
+import re
+import datetime
 from app.database.database import SessionLocal
 from app import repositories
 from app.ai.recognition import predict_frame
@@ -52,6 +56,8 @@ class BackgroundMonitorManager:
         self.stop_events = {}
         self.latest_frames = {} 
         self.last_logged = {} # Menyimpan waktu terakhir log untuk tiap (cctv_id, lecture_id)
+        self.last_snapshot = {} # Menyimpan kapan terakhir snapshot fisik diambil
+        self.session_uuids = {} # Menyimpan UUID sesi untuk tiap (cctv_id, lecture_id)
         self.last_update_time = time.time()
 
     def get_latest_frame(self, cctv_id):
@@ -112,12 +118,31 @@ class BackgroundMonitorManager:
                     continue
                 
                 frame_copy = frame.copy()
+                
+                # Add timestamp watermark
+                now = datetime.datetime.now()
+                days = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
+                months = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
+                day_name = days[now.weekday()]
+                month_name = months[now.month - 1]
+                timestamp_str = f"{day_name}, {now.day:02d} {month_name} {now.year} - {now.strftime('%H:%M:%S')} WIB"
+                
+                # Posisi pojok kiri atas
+                text_x = 15
+                text_y = 30
+                
+                # Draw outline
+                cv2.putText(frame_copy, timestamp_str, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 3)
+                # Draw text
+                cv2.putText(frame_copy, timestamp_str, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
                 faces_detected = []
                 try:
                     faces_detected = predict_frame(frame_copy)
                 except Exception as e:
                     print(f"AI prediction error on camera {cctv_id}: {e}")
 
+                # Pass 1: Gather valid detected lectures and draw all boxes
+                valid_detections = []
                 for face in faces_detected:
                     if not face.get("box"):
                         continue
@@ -130,19 +155,14 @@ class BackgroundMonitorManager:
                     if user_id:
                         lecture = repositories.lectures.get_lecture_by_id(db, user_id)
                     elif name_label.lower() != "unknown":
-                        lecture = repositories.lectures.get_lecture_by_nis(db, name_label)
+                        lecture = repositories.lectures.get_lecture_by_name(db, name_label)
                         
                     if lecture:
-                        # Log to DB dengan cooldown pendek (3 detik) agar last_seen terasa realtime
-                        # namun tetap mencegah spam ke database pada 30 FPS.
-                        current_time = time.time()
-                        last_time = self.last_logged.get((cctv_id, lecture.id), 0)
-                        if current_time - last_time > 3: # 5 detik
-                            repositories.lectures.create_detection_log(db, cctv_id, lecture.id, confidence)
-                            self.last_logged[(cctv_id, lecture.id)] = current_time
-                            self.last_update_time = current_time
-                            
                         name_label = lecture.name
+                        valid_detections.append({
+                            "lecture": lecture,
+                            "confidence": confidence
+                        })
 
                     color = (0, 0, 255) if name_label.lower() == "unknown" else (0, 255, 0)
                     cv2.rectangle(frame_copy, (x1, y1), (x2, y2), color, 2)
@@ -155,6 +175,67 @@ class BackgroundMonitorManager:
                     (w, h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 1)
                     cv2.rectangle(frame_copy, (x1, y1 - 20), (x1 + w, y1), color, -1)
                     cv2.putText(frame_copy, label, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+
+                # Pass 2: Save snapshot and log to DB
+                current_time = time.time()
+                needs_logging = []
+                
+                for det in valid_detections:
+                    lecture = det["lecture"]
+                    
+                    # Cek update log rutin (setiap 3 detik)
+                    last_time = self.last_logged.get((cctv_id, lecture.id), 0)
+                    if current_time - last_time > 3:
+                        needs_logging.append(det)
+                        
+                if needs_logging:
+                    # Kita membuat resize 1x saja kalau ada yang butuh di-log
+                    height, width = frame_copy.shape[:2]
+                    scale = 640 / width
+                    new_width, new_height = int(width * scale), int(height * scale)
+                    snapshot_frame = cv2.resize(frame_copy, (new_width, new_height))
+                    
+                    base_snapshot_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "storage", "snapshots")
+                    
+                    for det in needs_logging:
+                        lecture = det["lecture"]
+                        confidence = det["confidence"]
+                        
+                        last_snap = self.last_snapshot.get((cctv_id, lecture.id), 0)
+                        is_new_session = (current_time - last_snap > 1800) # 30 menit
+                        
+                        if is_new_session:
+                            self.session_uuids[(cctv_id, lecture.id)] = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                            self.last_snapshot[(cctv_id, lecture.id)] = current_time
+                            
+                        session_uuid = self.session_uuids.get((cctv_id, lecture.id), datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
+                        
+                        folder_name = re.sub(r'[\\/*?:"<>|]', "", lecture.name).strip()
+                        user_snapshot_dir = os.path.join(base_snapshot_dir, folder_name)
+                        os.makedirs(user_snapshot_dir, exist_ok=True)
+                        
+                        # Selalu ambil Last Seen (overwrite file lama di disk)
+                        last_filename = f"{session_uuid}_last.jpg"
+                        last_path = os.path.join(user_snapshot_dir, last_filename)
+                        cv2.imwrite(last_path, snapshot_frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+                        
+                        first_path_db = None
+                        if is_new_session:
+                            # Jika sesi baru, buat juga First Seen copy
+                            first_filename = f"{session_uuid}_first.jpg"
+                            first_path = os.path.join(user_snapshot_dir, first_filename)
+                            cv2.imwrite(first_path, snapshot_frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+                            first_path_db = f"{folder_name}/{first_filename}"
+                            
+                        last_path_db = f"{folder_name}/{last_filename}"
+                        
+                        repositories.lectures.create_detection_log(
+                            db, cctv_id, lecture.id, confidence, 
+                            snapshot_path=first_path_db, 
+                            last_snapshot_path=last_path_db
+                        )
+                        self.last_logged[(cctv_id, lecture.id)] = current_time
+                        self.last_update_time = current_time
 
                 success, encoded_image = cv2.imencode('.jpg', frame_copy)
                 if success:

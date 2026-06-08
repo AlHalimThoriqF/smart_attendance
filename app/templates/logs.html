@@ -31,6 +31,7 @@
                     <tr class="border-b border-slate-200 bg-slate-50">
                         <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Subject</th>
                         <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Camera</th>
+                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-center">Snapshot</th>
                         <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Confidence</th>
                         <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">First Seen</th>
                         <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Last Seen</th>
@@ -39,7 +40,7 @@
                 </thead>
                 <tbody id="logs-table-body" class="divide-y divide-slate-100">
                     <tr>
-                        <td colspan="6" class="px-6 py-8 text-center text-slate-500 font-medium">Loading...</td>
+                        <td colspan="7" class="px-6 py-8 text-center text-slate-500 font-medium">Loading...</td>
                     </tr>
                 </tbody>
             </table>
@@ -57,6 +58,16 @@
                     class="px-3 py-1.5 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">Next</button>
             </div>
         </div>
+    </div>
+</div>
+
+<!-- Snapshot Modal -->
+<div id="snapshot-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm hidden opacity-0 transition-opacity duration-300">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-3xl transform scale-95 transition-transform duration-300 p-2 relative">
+        <button onclick="closeSnapshotModal()" class="absolute top-4 right-4 bg-white/80 p-1.5 rounded-full text-slate-700 hover:bg-slate-100 transition-colors z-10 shadow-sm">
+            <i data-feather="x" class="w-5 h-5"></i>
+        </button>
+        <img id="snapshot-modal-img" src="" class="w-full h-auto rounded-xl" alt="Snapshot">
     </div>
 </div>
 {% endblock %}
@@ -132,6 +143,26 @@
 
             const confidenceHtml = isUnknown ? '-' : `<span class="text-sm font-medium text-slate-600">${(log.confidence * 100).toFixed(1)}%</span>`;
 
+            const firstSnapshotHtml = log.snapshot_path 
+                ? `<div class="relative group">
+                       <img src="/snapshots/${log.snapshot_path}" onclick="openSnapshotModal('/snapshots/${log.snapshot_path}')" class="h-11 w-20 object-cover rounded-md shadow-sm border border-slate-200 cursor-pointer group-hover:scale-105 group-hover:shadow-md group-hover:border-indigo-200 transition-all duration-200" title="First Seen">
+                       <span class="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">FIRST</span>
+                   </div>` 
+                : `<span class="text-xs text-slate-400">No image</span>`;
+                
+            const lastSnapshotHtml = log.last_snapshot_path 
+                ? `<div class="relative group">
+                       <img src="/snapshots/${log.last_snapshot_path}" onclick="openSnapshotModal('/snapshots/${log.last_snapshot_path}')" class="h-11 w-20 object-cover rounded-md shadow-sm border border-slate-200 cursor-pointer group-hover:scale-105 group-hover:shadow-md group-hover:border-indigo-200 transition-all duration-200" title="Last Seen">
+                       <span class="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">LAST</span>
+                   </div>` 
+                : '';
+
+            const arrowHtml = log.last_snapshot_path 
+                ? `<div class="text-slate-300 flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></div>` 
+                : '';
+
+            const snapshotHtml = `<div class="flex items-center justify-center gap-2">${firstSnapshotHtml}${arrowHtml}${lastSnapshotHtml}</div>`;
+
             const badgeClass = isUnknown
                 ? 'bg-red-50 text-red-700 border-red-200'
                 : 'bg-emerald-50 text-emerald-700 border-emerald-200';
@@ -145,6 +176,7 @@
                     </div>
                 </td>
                 <td class="px-6 py-4 text-sm font-medium text-slate-600">${log.cctv ? log.cctv.name : `CCTV #${log.cctv_id}`}</td>
+                <td class="px-6 py-4">${snapshotHtml}</td>
                 <td class="px-6 py-4">${confidenceHtml}</td>
                 <td class="px-6 py-4 text-sm text-slate-500 font-medium whitespace-nowrap">${firstSeen}</td>
                 <td class="px-6 py-4 text-sm font-bold text-indigo-600 whitespace-nowrap">${lastSeen}</td>
@@ -167,6 +199,24 @@
 
     document.addEventListener('DOMContentLoaded', () => {
         fetchLogs();
+
+        window.openSnapshotModal = function(imgSrc) {
+            document.getElementById('snapshot-modal-img').src = imgSrc;
+            const modal = document.getElementById('snapshot-modal');
+            modal.classList.remove('hidden');
+            void modal.offsetWidth;
+            modal.classList.remove('opacity-0');
+            modal.firstElementChild.classList.remove('scale-95');
+        };
+
+        window.closeSnapshotModal = function() {
+            const modal = document.getElementById('snapshot-modal');
+            modal.classList.add('opacity-0');
+            modal.firstElementChild.classList.add('scale-95');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 300);
+        };
 
         document.getElementById('logs-prev-btn').addEventListener('click', () => {
             if (logsCurrentPage > 1) {

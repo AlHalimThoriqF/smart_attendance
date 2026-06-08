@@ -17,7 +17,7 @@ __pycache__/
 Thumbs.db
 
 alembic/
-alembic.ini
-alembic.sh
 
+app/storage/snapshots/* 
+app/storage/faces/* 
 

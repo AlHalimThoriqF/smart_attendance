@@ -33,8 +33,10 @@ async def register_lecture(
             detail=f"Civitas member with identifier '{identifier}' is already registered."
         )
 
+    import re
+    safe_name = re.sub(r'[\\/*?:"<>|]', "", name).strip()
     file_extension = os.path.splitext(file.filename)[1] or ".jpg"
-    filename = f"{identifier}{file_extension}"
+    filename = f"{safe_name}{file_extension}"
 
     db_lecture = repositories.lectures.create_lecture(db, identifier, name, gender, jabatan, program_studi, jabatan_struktural, filename)
 
@@ -75,11 +77,15 @@ async def update_lecture(
         if existing:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Identifier already in use")
 
+    import re
+    new_name = name if name else db_lecture.name
+    safe_name = re.sub(r'[\\/*?:"<>|]', "", new_name).strip()
+    
     filename = db_lecture.images
+
     if file:
         file_extension = os.path.splitext(file.filename)[1] or ".jpg"
-        new_identifier = identifier if identifier else db_lecture.nis
-        filename = f"{new_identifier}{file_extension}"
+        filename = f"{safe_name}{file_extension}"
         file_path = os.path.join(repositories.lectures.FACES_DIR, filename)
         
         # Remove old image if filename changed
@@ -97,6 +103,25 @@ async def update_lecture(
                 f.write(content)
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to write image: {str(e)}")
+    else:
+        # Jika tidak upload foto baru, pastikan nama file fisik sesuai dengan format Nama
+        if db_lecture.images:
+            old_ext = os.path.splitext(db_lecture.images)[1] or ".jpg"
+            new_filename = f"{safe_name}{old_ext}"
+            
+            if db_lecture.images != new_filename:
+                old_path = os.path.join(repositories.lectures.FACES_DIR, db_lecture.images)
+                new_path = os.path.join(repositories.lectures.FACES_DIR, new_filename)
+                
+                if os.path.exists(old_path):
+                    try:
+                        os.rename(old_path, new_path)
+                        filename = new_filename
+                    except Exception as e:
+                        print(f"Error renaming file: {e}")
+                else:
+                    # File fisik tidak ada, kita update field db saja (atau biarkan)
+                    filename = new_filename
 
     updated_lecture = repositories.lectures.update_lecture(
         db=db,
@@ -107,7 +132,7 @@ async def update_lecture(
         jabatan=jabatan,
         program_studi=program_studi,
         jabatan_struktural=jabatan_struktural,
-        images=filename if file else None
+        images=filename
     )
     return updated_lecture
 

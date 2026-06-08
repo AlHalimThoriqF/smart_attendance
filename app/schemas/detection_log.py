@@ -19,6 +19,8 @@ class DetectionLogResponse(BaseModel):
     first_seen: datetime
     last_seen: datetime
     status: str
+    snapshot_path: Optional[str] = None
+    last_snapshot_path: Optional[str] = None
     lecture: LectureResponse
     cctv: Optional[CCTVResponse] = None
 

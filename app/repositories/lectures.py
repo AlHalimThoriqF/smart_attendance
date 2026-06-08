@@ -13,6 +13,9 @@ def get_all_lectures(db: Session):
 def get_lecture_by_nis(db: Session, nis: str):
     return db.query(models.Lecture).filter(models.Lecture.nis == nis).first()
 
+def get_lecture_by_name(db: Session, name: str):
+    return db.query(models.Lecture).filter(models.Lecture.name == name).first()
+
 def create_lecture(db: Session, nis: str, name: str, gender: str = "Unknown", jabatan: str = None, program_studi: str = None, jabatan_struktural: str = None, images: str = None):
     db_lecture = models.Lecture(nis=nis, name=name, gender=gender, jabatan=jabatan, program_studi=program_studi, jabatan_struktural=jabatan_struktural, images=images)
     db.add(db_lecture)
@@ -42,8 +45,10 @@ def update_lecture(db: Session, db_lecture: models.Lecture, nis: str = None, nam
 
 def delete_lecture(db: Session, db_lecture: models.Lecture):
     # Clean up associated face photo from local storage
+    import re
+    safe_name = re.sub(r'[\\/*?:"<>|]', "", db_lecture.name).strip()
     for ext in [".jpg", ".png", ".jpeg"]:
-        file_path = os.path.join(FACES_DIR, f"{db_lecture.nis}{ext}")
+        file_path = os.path.join(FACES_DIR, f"{safe_name}{ext}")
         if os.path.exists(file_path):
             try:
                 os.remove(file_path)
@@ -56,7 +61,7 @@ def delete_lecture(db: Session, db_lecture: models.Lecture):
 def get_lecture_by_id(db: Session, lecture_id: int):
     return db.query(models.Lecture).filter(models.Lecture.id == lecture_id).first()
 
-def create_detection_log(db: Session, cctv_id: int, lecture_id: int, confidence: float, status: str = "present"):
+def create_detection_log(db: Session, cctv_id: int, lecture_id: int, confidence: float, status: str = "present", snapshot_path: str = None, last_snapshot_path: str = None):
     # Jika orang yang sama terekam di kamera yang sama dan belum lewat dari 30 menit sejak terakhir terlihat,
     # maka gabungkan ke dalam log yang sama (sesi yang sama).
     session_timeout = datetime.datetime.now() - datetime.timedelta(minutes=30)
@@ -69,9 +74,13 @@ def create_detection_log(db: Session, cctv_id: int, lecture_id: int, confidence:
 
     if existing_log:
         existing_log.last_seen = func.now()
-        # Perbarui nilai confidence jika deteksi baru lebih akurat
-        if confidence > existing_log.confidence:
-            existing_log.confidence = confidence
+        # Perbarui nilai confidence agar selalu mencerminkan deteksi terakhir (Last Seen)
+        existing_log.confidence = confidence
+        
+        # Update last_snapshot_path jika diberikan
+        if last_snapshot_path:
+            existing_log.last_snapshot_path = last_snapshot_path
+            
         db.commit()
         db.refresh(existing_log)
         return existing_log
@@ -80,7 +89,9 @@ def create_detection_log(db: Session, cctv_id: int, lecture_id: int, confidence:
             cctv_id=cctv_id,
             lecture_id=lecture_id,
             confidence=confidence,
-            status=status
+            status=status,
+            snapshot_path=snapshot_path,
+            last_snapshot_path=last_snapshot_path
         )
         db.add(db_log)
         db.commit()
