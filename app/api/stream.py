@@ -5,7 +5,7 @@ import cv2
 import threading
 import time
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from app.ai.engine import predict_frame
+from app.ai.recognition import predict_frame
 from app.database.database import SessionLocal
 from app import repositories
 from app.ai.tracker import FaceTracker

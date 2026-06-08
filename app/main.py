@@ -5,7 +5,7 @@ from app.database.database import engine, Base, SessionLocal
 from app.api import cctv, lectures, stream, auth
 from app import pages
 from app.repositories.users import seed_default_user
-from app.ai.engine import initialize_models
+from app.ai.recognition import initialize_models
 from app.ai.background_monitor import BackgroundMonitor
 import os
 import time

@@ -4,7 +4,7 @@ import cv2
 import base64
 from app.database.database import SessionLocal
 from app import repositories
-from app.ai.engine import predict_frame
+from app.ai.recognition import predict_frame
 from app.ai.tracker import FaceTracker
 
 class CameraStreamReader:
