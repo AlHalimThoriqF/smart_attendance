@@ -62,12 +62,14 @@
 </div>
 
 <!-- Snapshot Modal -->
-<div id="snapshot-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm hidden opacity-0 transition-opacity duration-300">
-    <div class="bg-white rounded-2xl shadow-xl w-full max-w-3xl transform scale-95 transition-transform duration-300 p-2 relative">
+<div id="snapshot-modal" onclick="closeSnapshotModal()" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm hidden opacity-0 transition-opacity duration-300 p-4">
+    <div onclick="event.stopPropagation()" class="bg-white rounded-2xl shadow-xl w-full max-w-2xl h-[75vh] min-h-[400px] max-h-[800px] transform scale-95 transition-transform duration-300 p-2 relative flex flex-col">
         <button onclick="closeSnapshotModal()" class="absolute top-4 right-4 bg-white/80 p-1.5 rounded-full text-slate-700 hover:bg-slate-100 transition-colors z-10 shadow-sm">
             <i data-feather="x" class="w-5 h-5"></i>
         </button>
-        <img id="snapshot-modal-img" src="" class="w-full h-auto rounded-xl" alt="Snapshot">
+        <div class="w-full h-full bg-slate-50 rounded-xl flex items-center justify-center p-2 overflow-hidden">
+            <img id="snapshot-modal-img" src="" class="w-full h-full object-contain" alt="Snapshot">
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -135,8 +137,18 @@
             tr.className = "hover:bg-slate-50 transition-colors";
 
             const isUnknown = log.lecture_id === null;
-            const firstSeen = new Date(log.first_seen).toLocaleString();
-            const lastSeen = new Date(log.last_seen).toLocaleString();
+            const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+            const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit' };
+            
+            const firstDate = new Date(log.first_seen);
+            const firstDateStr = firstDate.toLocaleDateString('id-ID', dateOptions);
+            const firstTimeStr = firstDate.toLocaleTimeString('id-ID', timeOptions).replace(/\./g, ':');
+            const firstSeen = `<div>${firstDateStr}</div><div class="text-xs text-slate-400 mt-0.5 font-normal">${firstTimeStr} WIB</div>`;
+
+            const lastDate = new Date(log.last_seen);
+            const lastDateStr = lastDate.toLocaleDateString('id-ID', dateOptions);
+            const lastTimeStr = lastDate.toLocaleTimeString('id-ID', timeOptions).replace(/\./g, ':');
+            const lastSeen = `<div>${lastDateStr}</div><div class="text-xs opacity-75 mt-0.5 font-normal">${lastTimeStr} WIB</div>`;
 
             const mainText = isUnknown ? 'Unknown Person' : log.lecture.name;
             const subText = !isUnknown ? `<div class="text-xs text-slate-500 mt-0.5">${log.lecture.nis}</div>` : '';

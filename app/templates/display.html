@@ -16,6 +16,21 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Feather Icons -->
     <script src="https://unpkg.com/feather-icons"></script>
+    <style>
+        @keyframes scroll-y {
+            0% {
+                transform: translateY(0);
+            }
+
+            100% {
+                transform: translateY(-50%);
+            }
+        }
+
+        .pause-scroll:hover {
+            animation-play-state: paused;
+        }
+    </style>
 </head>
 
 <body class="bg-slate-50 text-slate-900 overflow-hidden font-sans flex flex-col h-screen">
@@ -47,29 +62,33 @@
             <table class="w-full text-left border-collapse table-fixed z-20 bg-slate-100">
                 <thead>
                     <tr class="border-b border-slate-200">
-                        <th class="w-32 py-6 text-2xl font-black text-slate-700 uppercase tracking-wider text-center">FOTO</th>
-                        <th class="py-6 px-6 text-2xl font-black text-slate-700 uppercase tracking-wider">NAMA</th>
-                        <th class="py-6 px-6 text-2xl font-black text-slate-700 uppercase tracking-wider text-center">TERAKHIR TERLIHAT</th>
-                        <th class="py-6 px-6 text-2xl font-black text-slate-700 uppercase tracking-wider text-center">CCTV</th>
-                        <th class="w-48 py-6 px-6 text-2xl font-black text-slate-700 uppercase tracking-wider text-center">STATUS</th>
+                        <th class="w-32 py-6 text-2xl font-black text-slate-700 uppercase tracking-wider text-center">
+                            FOTO</th>
+                        <th class="w-1/2 py-6 px-6 text-2xl font-black text-slate-700 uppercase tracking-wider">NAMA
+                        </th>
+                        <th class="py-6 px-6 text-2xl font-black text-slate-700 uppercase tracking-wider text-center">
+                            TERAKHIR TERLIHAT</th>
+                        <th class="py-6 px-6 text-2xl font-black text-slate-700 uppercase tracking-wider text-center">
+                            CCTV</th>
+                        <th
+                            class="w-48 py-6 px-6 text-2xl font-black text-slate-700 uppercase tracking-wider text-center">
+                            STATUS</th>
                     </tr>
                 </thead>
             </table>
 
             <!-- Scrolling Rows -->
             <div id="scroll-container" class="flex-1 overflow-hidden relative bg-white">
-                <div id="content-wrapper" class="h-full w-full">
-                    <marquee id="marquee-element" direction="up" scrollamount="3" class="h-full w-full" behavior="scroll" loop="infinite">
-                        <table id="data-table" class="w-full text-left border-collapse table-fixed">
-                            <tbody id="users-table-body" class="divide-y divide-slate-200">
-                                <tr>
-                                    <td colspan="5" class="px-6 py-12 text-center text-2xl font-bold text-slate-400">
-                                        LOADING DATA...
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </marquee>
+                <div id="content-wrapper" class="w-full">
+                    <table id="data-table" class="w-full text-left border-collapse table-fixed">
+                        <tbody id="users-table-body" class="divide-y divide-slate-200">
+                            <tr>
+                                <td colspan="5" class="px-6 py-12 text-center text-2xl font-bold text-slate-400">
+                                    LOADING DATA...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -95,10 +114,10 @@
             document.querySelectorAll('.relative-time-text').forEach(el => {
                 const dateStr = el.getAttribute('data-time');
                 if (!dateStr) return;
-                
+
                 const date = new Date(dateStr);
                 const diffInSeconds = Math.floor((now - date) / 1000);
-                
+
                 let relativeText = '';
                 if (diffInSeconds < 60) {
                     relativeText = 'Baru saja';
@@ -119,20 +138,20 @@
                 const usersRes = await fetch('/api/users');
                 if (!usersRes.ok) throw new Error('Failed to fetch users');
                 const usersData = await usersRes.json();
-                
+
                 // Fetch detection logs
                 const logsRes = await fetch('/api/detection-logs');
                 if (!logsRes.ok) throw new Error('Failed to fetch logs');
                 const logsData = await logsRes.json();
-                
+
                 const todayStr = new Date().toDateString();
-                
+
                 // Filter logs to today only
                 const todaysLogs = logsData.filter(log => new Date(log.last_seen).toDateString() === todayStr);
-                
+
                 // Map of user_id -> latest log
                 const userLogsMap = {};
-                
+
                 todaysLogs.forEach(log => {
                     if (log.lecture_id !== null) {
                         if (!userLogsMap[log.lecture_id]) {
@@ -144,9 +163,9 @@
                         }
                     }
                 });
-                
+
                 let displayItems = [];
-                
+
                 // Add all registered users
                 usersData.forEach(user => {
                     const log = userLogsMap[user.id];
@@ -154,7 +173,7 @@
                         displayItems.push({
                             type: 'known',
                             name: user.name,
-                            images: user.images,
+                            last_snapshot_path: log.last_snapshot_path,
                             last_seen: log.last_seen,
                             camera: log.cctv ? (log.cctv.location || log.cctv.name) : 'Kamera ' + log.cctv_id,
                             status: 'HADIR'
@@ -163,39 +182,39 @@
                         displayItems.push({
                             type: 'absent',
                             name: user.name,
-                            images: user.images,
+                            last_snapshot_path: null,
                             last_seen: null,
                             camera: '-',
                             status: 'BELUM TERDETEKSI HARI INI'
                         });
                     }
                 });
-                
+
                 // Sort display items:
                 // 1. HADIR (detected today) sorted by last_seen desc
-                // 2. BELUM TERDETEKSI (not detected today) sorted by name
+                // 2. BELUM TERDETEKSI HARI INI sorted by name
                 displayItems.sort((a, b) => {
-                    if (a.status !== 'BELUM TERDETEKSI' && b.status !== 'BELUM TERDETEKSI') {
+                    if (a.status === 'HADIR' && b.status === 'HADIR') {
                         return new Date(b.last_seen) - new Date(a.last_seen);
                     }
-                    if (a.status !== 'BELUM TERDETEKSI') return -1;
-                    if (b.status !== 'BELUM TERDETEKSI') return 1;
+                    if (a.status === 'HADIR') return -1;
+                    if (b.status === 'HADIR') return 1;
                     return a.name.localeCompare(b.name);
                 });
 
                 const tbody = document.getElementById('users-table-body');
                 if (displayItems.length > 0) {
                     const html = displayItems.map((item) => {
-                        const photoUrl = item.images 
-                            ? '/faces/' + item.images + '?t=' + new Date().getTime()
+                        const photoUrl = item.last_snapshot_path
+                            ? '/snapshots/' + item.last_snapshot_path + '?t=' + new Date().getTime()
                             : 'https://ui-avatars.com/api/?name=' + encodeURIComponent(item.name) + '&background=e2e8f0&color=64748b';
-                        
+
                         let lastSeenStr = '-';
                         if (item.last_seen) {
                             const date = new Date(item.last_seen);
                             const now = new Date();
                             const diffInSeconds = Math.floor((now - date) / 1000);
-                            
+
                             let relativeText = '';
                             if (diffInSeconds < 60) {
                                 relativeText = 'Baru saja';
@@ -206,11 +225,11 @@
                                 const hours = Math.floor(diffInSeconds / 3600);
                                 relativeText = `${hours} jam yang lalu`;
                             }
-                            
+
                             const timeStr = date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).replace(/\./g, ':');
-                            lastSeenStr = `${timeStr} WIB <br> <span class="relative-time-text text-lg font-medium text-slate-400 mt-1 inline-block" data-time="${item.last_seen}">(${relativeText})</span>`;
+                            lastSeenStr = `${timeStr} WIB <br> <span class="relative-time-text text-lg font-bold text-slate-400 mt-1 inline-block" data-time="${item.last_seen}">(${relativeText})</span>`;
                         }
-                        
+
                         let badgeClass = '';
                         if (item.status === 'HADIR') {
                             badgeClass = 'bg-emerald-100 text-emerald-700 border-emerald-300';
@@ -220,10 +239,10 @@
 
                         return `
                         <tr class="hover:bg-slate-50 transition-colors">
-                            <td class="w-32  text-center">
+                            <td class="w-32 text-center">
                                 <img src="${photoUrl}" alt="Photo" class="w-32 h-40 object-cover object-top mx-auto shadow-sm">
                             </td>
-                            <td class="px-6 py-8 text-3xl font-black text-slate-800 uppercase">${item.name}</td>
+                            <td class="w-1/2 px-6 py-8 text-2xl font-black text-slate-800 uppercase">${item.name}</td>
                             <td class="py-8 px-6 text-2xl font-bold text-slate-600 text-center">${lastSeenStr}</td>
                             <td class="py-8 px-6 text-2xl font-bold text-slate-600 text-center">${item.camera}</td>
                             <td class="w-48 py-8 px-6 text-center">
@@ -245,32 +264,22 @@
                         </tr>
                     `;
                 }
-                
-                // Toggle marquee based on content height
+
+                // Toggle seamless scroll based on content height
                 setTimeout(() => {
                     const scrollContainer = document.getElementById('scroll-container');
                     const table = document.getElementById('data-table');
                     const wrapper = document.getElementById('content-wrapper');
-                    let marquee = document.getElementById('marquee-element');
-                    
+
+                    wrapper.style.animation = 'none';
+                    wrapper.classList.remove('pause-scroll');
+
                     if (table.offsetHeight > scrollContainer.offsetHeight) {
-                        if (!marquee) {
-                            marquee = document.createElement('marquee');
-                            marquee.id = 'marquee-element';
-                            marquee.direction = 'up';
-                            marquee.scrollAmount = '3';
-                            marquee.className = 'h-full w-full';
-                            marquee.behavior = 'scroll';
-                            marquee.loop = 'infinite';
-                            marquee.appendChild(table);
-                            wrapper.innerHTML = '';
-                            wrapper.appendChild(marquee);
-                        }
-                    } else {
-                        if (marquee) {
-                            wrapper.innerHTML = '';
-                            wrapper.appendChild(table);
-                        }
+                        const originalHeight = table.offsetHeight;
+                        tbody.innerHTML = tbody.innerHTML + tbody.innerHTML;
+                        const duration = originalHeight / 40; // 40px per second
+                        wrapper.style.animation = `scroll-y ${duration}s linear infinite`;
+                        wrapper.classList.add('pause-scroll');
                     }
                 }, 100);
 
@@ -288,21 +297,21 @@
         }
 
         loadUsers();
-        
+
         // Websocket for real-time updates
         let ws;
         function connectWebSocket() {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             ws = new WebSocket(`${protocol}//${window.location.host}/ws/display`);
-            
-            ws.onmessage = function(event) {
+
+            ws.onmessage = function (event) {
                 const data = JSON.parse(event.data);
                 if (data.event === 'refresh') {
                     loadUsers();
                 }
             };
-            
-            ws.onclose = function() {
+
+            ws.onclose = function () {
                 // Try to reconnect in 5 seconds
                 setTimeout(connectWebSocket, 5000);
             };

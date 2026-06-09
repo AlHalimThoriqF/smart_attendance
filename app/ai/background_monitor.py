@@ -205,15 +205,37 @@ class BackgroundMonitorManager:
                         
                 if needs_logging:
                     height, width = frame_copy.shape[:2]
-                    scale = 640 / width
-                    new_width, new_height = int(width * scale), int(height * scale)
-                    snapshot_frame = cv2.resize(frame_copy, (new_width, new_height))
-                    
                     base_snapshot_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "storage", "snapshots")
                     
                     for det in needs_logging:
                         lecture = det["lecture"]
                         confidence = det["confidence"]
+                        
+                        # Zoom to face with padding
+                        x1, y1, x2, y2 = det["box"]
+                        face_w = x2 - x1
+                        face_h = y2 - y1
+                        
+                        pad_x = int(face_w * 0.8)
+                        pad_y_top = int(face_h * 0.8)
+                        pad_y_bottom = int(face_h * 0.8)
+                        
+                        start_y = max(0, y1 - pad_y_top)
+                        end_y = min(height, y2 + pad_y_bottom)
+                        start_x = max(0, x1 - pad_x)
+                        end_x = min(width, x2 + pad_x)
+                        
+                        snapshot_frame = frame_copy[start_y:end_y, start_x:end_x]
+                        sh, sw = snapshot_frame.shape[:2]
+                        if sw > 0 and sh > 0:
+                            # Resize if too large
+                            if sw > 400:
+                                scale = 400 / sw
+                                snapshot_frame = cv2.resize(snapshot_frame, (int(sw * scale), int(sh * scale)))
+                        else:
+                            # Fallback if invalid crop
+                            scale = 640 / width
+                            snapshot_frame = cv2.resize(frame_copy, (int(width * scale), int(height * scale)))
                         
                         last_snap = self.last_snapshot.get((cctv_id, lecture.id), 0)
                         is_new_session = (current_time - last_snap > 1800)

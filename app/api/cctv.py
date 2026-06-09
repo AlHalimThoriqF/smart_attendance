@@ -48,6 +48,21 @@ def update_cctv(camera_id: int, camera_data: schemas.CCTVUpdate, db: Session = D
         
     return updated_cctv
 
+@router.post("/{camera_id}/refresh", response_model=schemas.CCTVResponse)
+def refresh_cctv(camera_id: int, db: Session = Depends(get_db), admin=Depends(get_current_user)):
+    db_camera = repositories.cctv.get_cctv(db, camera_id)
+    if not db_camera:
+        raise HTTPException(status_code=404, detail="CCTV camera not found")
+        
+    BackgroundMonitor.stop_camera(db_camera.id)
+    if db_camera.status:
+        rtsp = db_camera.rtsp_url
+        if rtsp.isdigit():
+            rtsp = int(rtsp)
+        BackgroundMonitor.start_camera(db_camera.id, rtsp)
+        
+    return db_camera
+
 @router.delete("/{camera_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_cctv(camera_id: int, db: Session = Depends(get_db), admin=Depends(get_current_user)):
     db_camera = repositories.cctv.get_cctv(db, camera_id)

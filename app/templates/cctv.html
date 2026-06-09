@@ -26,7 +26,8 @@
                         <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">RTSP URL</th>
                         <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Location</th>
                         <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
-                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>
+                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">
+                            Actions</th>
                     </tr>
                 </thead>
                 <tbody id="cctv-table-body" class="divide-y divide-slate-100">
@@ -36,14 +37,17 @@
                 </tbody>
             </table>
         </div>
-        <div id="cctv-pagination" class="px-6 py-4 border-t border-slate-200 flex items-center justify-between bg-slate-50 hidden">
+        <div id="cctv-pagination"
+            class="px-6 py-4 border-t border-slate-200 flex items-center justify-between bg-slate-50 hidden">
             <div class="text-sm text-slate-500" id="cctv-pagination-info">
                 Showing 0 to 0 of 0 entries
             </div>
             <div class="flex items-center gap-2">
-                <button id="cctv-prev-btn" class="px-3 py-1.5 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">Previous</button>
+                <button id="cctv-prev-btn"
+                    class="px-3 py-1.5 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">Previous</button>
                 <span id="cctv-page-indicator" class="text-sm font-medium text-slate-700 px-2">Page 1</span>
-                <button id="cctv-next-btn" class="px-3 py-1.5 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">Next</button>
+                <button id="cctv-next-btn"
+                    class="px-3 py-1.5 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">Next</button>
             </div>
         </div>
     </div>
@@ -85,7 +89,8 @@
 
             <div>
                 <label for="cctv-status" class="block text-sm font-semibold text-slate-700 mb-1.5">Status</label>
-                <select id="cctv-status" class="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-all shadow-sm">
+                <select id="cctv-status"
+                    class="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-all shadow-sm">
                     <option value="true">Aktif</option>
                     <option value="false">Tidak Aktif</option>
                 </select>
@@ -151,7 +156,7 @@
     function renderCCTVTable() {
         const tbody = document.getElementById('cctv-table-body');
         tbody.innerHTML = '';
-        
+
         if (allCCTVs.length === 0) {
             tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-8 text-center text-slate-500 font-medium">No cameras configured</td></tr>';
             document.getElementById('cctv-pagination').classList.add('hidden');
@@ -163,14 +168,14 @@
         const totalPages = Math.ceil(allCCTVs.length / cctvPerPage);
         const startIndex = (cctvCurrentPage - 1) * cctvPerPage;
         const endIndex = Math.min(startIndex + cctvPerPage, allCCTVs.length);
-        
+
         const paginatedData = allCCTVs.slice(startIndex, endIndex);
 
         paginatedData.forEach(item => {
             const tr = document.createElement('tr');
             tr.className = "hover:bg-slate-50 transition-colors";
-            
-            const badgeClass = item.status 
+
+            const badgeClass = item.status
                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                 : 'bg-slate-50 text-slate-500 border-slate-200';
             const statusText = item.status ? 'Aktif' : 'Tidak Aktif';
@@ -202,7 +207,7 @@
 
         document.getElementById('cctv-pagination-info').textContent = `Showing ${startIndex + 1} to ${endIndex} of ${allCCTVs.length} entries`;
         document.getElementById('cctv-page-indicator').textContent = `Page ${cctvCurrentPage} of ${totalPages}`;
-        
+
         document.getElementById('cctv-prev-btn').disabled = cctvCurrentPage === 1;
         document.getElementById('cctv-next-btn').disabled = cctvCurrentPage === totalPages;
     }
