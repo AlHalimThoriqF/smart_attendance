@@ -21,6 +21,7 @@ class DetectionLogResponse(BaseModel):
     status: str
     snapshot_path: Optional[str] = None
     last_snapshot_path: Optional[str] = None
+    crop_snapshot_path: Optional[str] = None
     lecture: LectureResponse
     cctv: Optional[CCTVResponse] = None
 

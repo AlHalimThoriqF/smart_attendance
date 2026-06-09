@@ -62,16 +62,16 @@
             <table class="w-full text-left border-collapse table-fixed z-20 bg-slate-100">
                 <thead>
                     <tr class="border-b border-slate-200">
-                        <th class="w-32 py-6 text-2xl font-black text-slate-700 uppercase tracking-wider text-center">
+                        <th class="w-32 py-2 text-2xl font-black text-slate-700 uppercase tracking-wider text-center">
                             FOTO</th>
-                        <th class="w-1/2 py-6 px-6 text-2xl font-black text-slate-700 uppercase tracking-wider">NAMA
+                        <th class="w-1/2 py-2 px-6 text-2xl font-black text-slate-700 uppercase tracking-wider">NAMA
                         </th>
-                        <th class="py-6 px-6 text-2xl font-black text-slate-700 uppercase tracking-wider text-center">
+                        <th class="py-2 px-6 text-2xl font-black text-slate-700 uppercase tracking-wider text-center">
                             TERAKHIR TERLIHAT</th>
-                        <th class="py-6 px-6 text-2xl font-black text-slate-700 uppercase tracking-wider text-center">
+                        <th class="py-2 px-6 text-2xl font-black text-slate-700 uppercase tracking-wider text-center">
                             CCTV</th>
                         <th
-                            class="w-48 py-6 px-6 text-2xl font-black text-slate-700 uppercase tracking-wider text-center">
+                            class="w-48 py-2 px-6 text-2xl font-black text-slate-700 uppercase tracking-wider text-center">
                             STATUS</th>
                     </tr>
                 </thead>
@@ -205,8 +205,9 @@
                 const tbody = document.getElementById('users-table-body');
                 if (displayItems.length > 0) {
                     const html = displayItems.map((item) => {
-                        const photoUrl = item.last_snapshot_path
-                            ? '/snapshots/' + item.last_snapshot_path + '?t=' + new Date().getTime()
+                        const cropPath = item.crop_snapshot_path || (item.last_snapshot_path ? item.last_snapshot_path.replace('.jpg', '_crop.jpg') : null);
+                        const photoUrl = cropPath
+                            ? encodeURI('/snapshots/' + cropPath) + '?t=' + new Date().getTime()
                             : 'https://ui-avatars.com/api/?name=' + encodeURIComponent(item.name) + '&background=e2e8f0&color=64748b';
 
                         let lastSeenStr = '-';

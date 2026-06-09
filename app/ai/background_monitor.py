@@ -113,6 +113,11 @@ class BackgroundMonitorManager:
         last_ai_time = 0
         cached_valid_detections = []
         cached_faces_detected = []
+        cached_clean_frame = None
+        
+        fps_start_time = time.time()
+        fps_frames_count = 0
+        current_fps = 0.0
         
         try:
             while not stop_event.is_set():
@@ -137,10 +142,26 @@ class BackgroundMonitorManager:
                 cv2.putText(frame_copy, timestamp_str, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 3)
                 cv2.putText(frame_copy, timestamp_str, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
                 
+                # Calculate FPS
+                fps_frames_count += 1
+                if current_time - fps_start_time >= 1.0:
+                    current_fps = fps_frames_count / (current_time - fps_start_time)
+                    fps_start_time = current_time
+                    fps_frames_count = 0
+                
+                # Display FPS on top right
+                fps_str = f"FPS: {current_fps:.1f}"
+                frame_height, frame_width = frame_copy.shape[:2]
+                text_size = cv2.getTextSize(fps_str, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)[0]
+                fps_x = frame_width - text_size[0] - 15
+                cv2.putText(frame_copy, fps_str, (fps_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 3)
+                cv2.putText(frame_copy, fps_str, (fps_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+                
                 # AI Inference (Throttled to 2 FPS)
                 if current_time - last_ai_time >= 0.5:
                     try:
                         cached_faces_detected = predict_frame(frame_copy)
+                        cached_clean_frame = frame.copy()
                     except Exception as e:
                         print(f"AI prediction error on camera {cctv_id}: {e}")
                     
@@ -189,11 +210,28 @@ class BackgroundMonitorManager:
                     if name_label.lower() == "unknown" or name_label == "UNKNOWN":
                         label = "Unknown"
                     else:
-                        label = f"{name_label} ({confidence*100:.1f}%)" if confidence > 0 else name_label
+                        # Clean name: strip titles after comma and shorten to max 2 words
+                        clean_name = name_label.split(',')[0].strip()
+                        words = clean_name.split()
+                        if len(words) > 2:
+                            clean_name = f"{words[0]} {words[1]}"
+                        
+                        # Abbreviate second word if still too long
+                        if len(clean_name) > 15 and len(words) >= 2:
+                            clean_name = f"{words[0]} {words[1][0]}."
+                            
+                        label = f"{clean_name} ({confidence*100:.1f}%)" if confidence > 0 else clean_name
                     
-                    (w, h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 1)
-                    cv2.rectangle(frame_copy, (x1, y1 - 20), (x1 + w, y1), color, -1)
-                    cv2.putText(frame_copy, label, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+                    font = cv2.FONT_HERSHEY_DUPLEX
+                    font_scale = 0.55
+                    thickness = 1
+                    (w, h), _ = cv2.getTextSize(label, font, font_scale, thickness)
+                    
+                    # Draw black background rectangle for text (high contrast)
+                    cv2.rectangle(frame_copy, (x1, y1 - h - 15), (x1 + w + 10, y1), (0, 0, 0), -1)
+                    
+                    # Draw white text
+                    cv2.putText(frame_copy, label, (x1 + 5, y1 - 6), font, font_scale, (255, 255, 255), thickness)
 
                 # Database Logging
                 needs_logging = []
@@ -216,26 +254,34 @@ class BackgroundMonitorManager:
                         face_w = x2 - x1
                         face_h = y2 - y1
                         
-                        pad_x = int(face_w * 0.8)
-                        pad_y_top = int(face_h * 0.8)
-                        pad_y_bottom = int(face_h * 0.8)
+                        # Tighter padding for a clean, professional profile picture look
+                        pad_x = int(face_w * 1.5)        # Kanan-kiri ditambah 30% dari lebar wajah
+                        pad_y_top = int(face_h * 0.7)    # Atas ditambah 50% untuk area rambut
+                        pad_y_bottom = int(face_h * 0.7) # Bawah ditambah 30% untuk leher/bahu
                         
                         start_y = max(0, y1 - pad_y_top)
                         end_y = min(height, y2 + pad_y_bottom)
                         start_x = max(0, x1 - pad_x)
                         end_x = min(width, x2 + pad_x)
                         
-                        snapshot_frame = frame_copy[start_y:end_y, start_x:end_x]
-                        sh, sw = snapshot_frame.shape[:2]
+                        # 1. Clean Crop for Display (No bounding box)
+                        # Use the cached clean frame from the exact moment of detection to prevent misalignment
+                        crop_source = cached_clean_frame if cached_clean_frame is not None else frame
+                        snapshot_frame_crop = crop_source[start_y:end_y, start_x:end_x].copy()
+                        sh, sw = snapshot_frame_crop.shape[:2]
                         if sw > 0 and sh > 0:
-                            # Resize if too large
                             if sw > 400:
                                 scale = 400 / sw
-                                snapshot_frame = cv2.resize(snapshot_frame, (int(sw * scale), int(sh * scale)))
+                                snapshot_frame_crop = cv2.resize(snapshot_frame_crop, (int(sw * scale), int(sh * scale)))
                         else:
-                            # Fallback if invalid crop
                             scale = 640 / width
-                            snapshot_frame = cv2.resize(frame_copy, (int(width * scale), int(height * scale)))
+                            snapshot_frame_crop = cv2.resize(frame, (int(width * scale), int(height * scale)))
+                            
+                        # 2. Full Frame with Bounding Box for Logs
+                        snapshot_frame_full = frame_copy.copy()
+                        if width > 1280:
+                            scale_full = 1280 / width
+                            snapshot_frame_full = cv2.resize(snapshot_frame_full, (int(width * scale_full), int(height * scale_full)))
                         
                         last_snap = self.last_snapshot.get((cctv_id, lecture.id), 0)
                         is_new_session = (current_time - last_snap > 1800)
@@ -251,22 +297,28 @@ class BackgroundMonitorManager:
                         os.makedirs(user_snapshot_dir, exist_ok=True)
                         
                         last_filename = f"{session_uuid}_last.jpg"
-                        last_path = os.path.join(user_snapshot_dir, last_filename)
-                        cv2.imwrite(last_path, snapshot_frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+                        last_crop_filename = f"{session_uuid}_last_crop.jpg"
+                        
+                        # Save both full and crop
+                        cv2.imwrite(os.path.join(user_snapshot_dir, last_filename), snapshot_frame_full, [cv2.IMWRITE_JPEG_QUALITY, 80])
+                        cv2.imwrite(os.path.join(user_snapshot_dir, last_crop_filename), snapshot_frame_crop, [cv2.IMWRITE_JPEG_QUALITY, 85])
                         
                         first_path_db = None
                         if is_new_session:
                             first_filename = f"{session_uuid}_first.jpg"
-                            first_path = os.path.join(user_snapshot_dir, first_filename)
-                            cv2.imwrite(first_path, snapshot_frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+                            first_crop_filename = f"{session_uuid}_first_crop.jpg"
+                            cv2.imwrite(os.path.join(user_snapshot_dir, first_filename), snapshot_frame_full, [cv2.IMWRITE_JPEG_QUALITY, 80])
+                            cv2.imwrite(os.path.join(user_snapshot_dir, first_crop_filename), snapshot_frame_crop, [cv2.IMWRITE_JPEG_QUALITY, 85])
                             first_path_db = f"{folder_name}/{first_filename}"
                             
                         last_path_db = f"{folder_name}/{last_filename}"
+                        crop_path_db = f"{folder_name}/{last_crop_filename}"
                         
                         repositories.lectures.create_detection_log(
                             db, cctv_id, lecture.id, confidence, 
                             snapshot_path=first_path_db, 
-                            last_snapshot_path=last_path_db
+                            last_snapshot_path=last_path_db,
+                            crop_snapshot_path=crop_path_db
                         )
                         self.last_logged[(cctv_id, lecture.id)] = current_time
                         self.last_update_time = current_time

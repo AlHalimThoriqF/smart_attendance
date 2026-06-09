@@ -25,7 +25,7 @@ def initialize_models():
         
         try:
             face_analysis = FaceAnalysis(
-                name='buffalo_sc',
+                name='buffalo_s',
                 providers=['CUDAExecutionProvider', 'CPUExecutionProvider']
             )
             face_analysis.prepare(ctx_id=0, det_size=(640, 640))

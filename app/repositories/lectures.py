@@ -61,7 +61,7 @@ def delete_lecture(db: Session, db_lecture: models.Lecture):
 def get_lecture_by_id(db: Session, lecture_id: int):
     return db.query(models.Lecture).filter(models.Lecture.id == lecture_id).first()
 
-def create_detection_log(db: Session, cctv_id: int, lecture_id: int, confidence: float, status: str = "present", snapshot_path: str = None, last_snapshot_path: str = None):
+def create_detection_log(db: Session, cctv_id: int, lecture_id: int, confidence: float, status: str = "present", snapshot_path: str = None, last_snapshot_path: str = None, crop_snapshot_path: str = None):
     # Jika orang yang sama terekam di kamera yang sama dan belum lewat dari 30 menit sejak terakhir terlihat,
     # maka gabungkan ke dalam log yang sama (sesi yang sama).
     session_timeout = datetime.datetime.now() - datetime.timedelta(minutes=30)
@@ -80,6 +80,8 @@ def create_detection_log(db: Session, cctv_id: int, lecture_id: int, confidence:
         # Update last_snapshot_path jika diberikan
         if last_snapshot_path:
             existing_log.last_snapshot_path = last_snapshot_path
+        if crop_snapshot_path:
+            existing_log.crop_snapshot_path = crop_snapshot_path
             
         db.commit()
         db.refresh(existing_log)
@@ -93,6 +95,7 @@ def create_detection_log(db: Session, cctv_id: int, lecture_id: int, confidence:
             status=status,
             snapshot_path=snapshot_path,
             last_snapshot_path=last_snapshot_path,
+            crop_snapshot_path=crop_snapshot_path,
             first_seen=now,
             last_seen=now
         )

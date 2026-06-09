@@ -38,6 +38,7 @@ class DetectionLog(Base):
     status: Mapped[str] = mapped_column(String(50), default="present", nullable=False)
     snapshot_path: Mapped[str] = mapped_column(String(255), nullable=True)
     last_snapshot_path: Mapped[str] = mapped_column(String(255), nullable=True)
+    crop_snapshot_path: Mapped[str] = mapped_column(String(255), nullable=True)
     # Relationships
     cctv: Mapped["CCTV"] = relationship("CCTV", back_populates="logs")
     lecture: Mapped["Lecture"] = relationship("Lecture", back_populates="logs")
