@@ -11,7 +11,6 @@ python-jose[cryptography]
 passlib[bcrypt]
 bcrypt
 python-dotenv
-alembic
 insightface
 scikit-learn
 opencv-python-headless
