@@ -10,17 +10,10 @@ templates_dir = os.path.join(BASE_DIR, "templates")
 
 templates = Jinja2Templates(directory=templates_dir)
 
-@router.get("/login", response_class=HTMLResponse)
-async def login_page(request: Request):
-    return templates.TemplateResponse(request=request, name="login.html", context={"active_page": "login"})
 
 @router.get("/live", response_class=HTMLResponse)
 async def dashboard_page(request: Request):
     return templates.TemplateResponse(request=request, name="dashboard.html", context={"active_page": "dashboard"})
-
-@router.get("/cctv", response_class=HTMLResponse)
-async def cctv_page(request: Request):
-    return templates.TemplateResponse(request=request, name="cctv.html", context={"active_page": "cctv"})
 
 @router.get("/lectures", response_class=HTMLResponse)
 async def lectures_page(request: Request):

@@ -10,6 +10,13 @@
             <p class="text-slate-500 text-sm">History of recognized faces detections</p>
         </div>
         <div class="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+            <label class="flex items-center gap-2 text-sm text-slate-600 font-medium cursor-pointer">
+                <input type="checkbox" id="group-checkbox" class="w-4 h-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500">
+                Group by Person
+            </label>
+            <div class="relative w-full sm:w-40">
+                <input type="date" id="date-filter" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-700 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-shadow" title="Filter by Date">
+            </div>
             <div class="relative w-full sm:w-64">
                 <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
                     <i data-feather="search" class="w-4 h-4 text-slate-400"></i>
@@ -81,33 +88,82 @@
     let logsCurrentPage = 1;
     const logsPerPage = 10;
 
-    function applySearch() {
+    let isGrouped = false;
+
+    function processLogs() {
         const term = document.getElementById('search-input').value.toLowerCase();
-        if (!term) {
-            filteredLogs = [...allLogs];
-            return;
+        const dateFilter = document.getElementById('date-filter').value;
+        let processed = [...allLogs];
+
+        if (dateFilter) {
+            processed = processed.filter(log => {
+                const d = new Date(log.first_seen);
+                const year = d.getFullYear();
+                const month = String(d.getMonth() + 1).padStart(2, '0');
+                const day = String(d.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}` === dateFilter;
+            });
         }
-        filteredLogs = allLogs.filter(log => {
-            const isUnknown = log.lecture_id === null;
-            const mainText = isUnknown ? 'unknown person' : log.lecture.name.toLowerCase();
-            const subText = !isUnknown ? log.lecture.nis.toLowerCase() : '';
-            const cctvName = (log.cctv ? log.cctv.name : `cctv #${log.cctv_id}`).toLowerCase();
-            const statusText = isUnknown ? 'tidak dikenal' : 'hadir';
+
+        if (term) {
+            processed = processed.filter(log => {
+                const isUnknown = log.lecture_id === null;
+                const mainText = isUnknown ? 'unknown person' : log.lecture.name.toLowerCase();
+                const subText = !isUnknown ? log.lecture.nis.toLowerCase() : '';
+                const cctvName = (log.cctv ? log.cctv.name : `cctv #${log.cctv_id}`).toLowerCase();
+                const statusText = isUnknown ? 'tidak dikenal' : 'hadir';
+                
+                return mainText.includes(term) || 
+                       subText.includes(term) || 
+                       cctvName.includes(term) ||
+                       statusText.includes(term);
+            });
+        }
+        
+        if (isGrouped) {
+            const groupsMap = {};
+            const unknownLogs = [];
+            processed.forEach(log => {
+                if (log.lecture_id === null) {
+                    unknownLogs.push(log);
+                } else {
+                    const d = new Date(log.first_seen);
+                    const year = d.getFullYear();
+                    const month = String(d.getMonth() + 1).padStart(2, '0');
+                    const day = String(d.getDate()).padStart(2, '0');
+                    const dateStr = `${year}-${month}-${day}`;
+                    
+                    const groupKey = `${log.lecture_id}_${dateStr}`;
+                    
+                    if (!groupsMap[groupKey]) {
+                        groupsMap[groupKey] = [];
+                    }
+                    groupsMap[groupKey].push(log);
+                }
+            });
             
-            return mainText.includes(term) || 
-                   subText.includes(term) || 
-                   cctvName.includes(term) ||
-                   statusText.includes(term);
-        });
+            const groupedArray = [];
+            for (const key in groupsMap) {
+                const logsArr = groupsMap[key];
+                logsArr.sort((a, b) => new Date(b.last_seen) - new Date(a.last_seen));
+                const masterLog = { ...logsArr[0], is_group: true, sub_logs: logsArr };
+                groupedArray.push(masterLog);
+            }
+            
+            processed = groupedArray.concat(unknownLogs);
+            processed.sort((a, b) => new Date(b.last_seen) - new Date(a.last_seen));
+        }
+        
+        filteredLogs = processed;
+        logsCurrentPage = 1;
+        renderLogsTable();
     }
 
     async function fetchLogs() {
         try {
             const data = await apiFetch('/detection-logs');
             allLogs = data.sort((a, b) => new Date(b.last_seen) - new Date(a.last_seen));
-            applySearch();
-            logsCurrentPage = 1;
-            renderLogsTable();
+            processLogs();
         } catch (e) {
             console.error(e);
             document.getElementById('logs-table-body').innerHTML = `<tr><td colspan="6" class="px-6 py-8 text-center text-red-500 font-medium">Failed to load logs</td></tr>`;
@@ -132,10 +188,7 @@
 
         const paginatedData = filteredLogs.slice(startIndex, endIndex);
 
-        paginatedData.forEach(log => {
-            const tr = document.createElement('tr');
-            tr.className = "hover:bg-slate-50 transition-colors";
-
+        function createRowHtml(log, groupId = null) {
             const isUnknown = log.lecture_id === null;
             const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
             const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit' };
@@ -150,26 +203,34 @@
             const lastTimeStr = lastDate.toLocaleTimeString('id-ID', timeOptions).replace(/\./g, ':');
             const lastSeen = `<div>${lastDateStr}</div><div class="text-xs opacity-75 mt-0.5 font-normal">${lastTimeStr} WIB</div>`;
 
-            const mainText = isUnknown ? 'Unknown Person' : log.lecture.name;
-            const subText = !isUnknown ? `<div class="text-xs text-slate-500 mt-0.5">${log.lecture.nis}</div>` : '';
+            let mainText = isUnknown ? 'Unknown Person' : log.lecture.name;
+            let subText = !isUnknown ? `<div class="text-xs text-slate-500 mt-0.5">${log.lecture.nis}</div>` : '';
+
+            // Group toggle icon
+            let toggleIcon = '';
+            if (log.is_group && log.sub_logs && log.sub_logs.length > 1) {
+                toggleIcon = `<button onclick="toggleSubLogs('${groupId}', event)" class="mr-2 mt-0.5 text-slate-400 hover:text-orange-500 transition-colors focus:outline-none flex items-center justify-center bg-slate-100 rounded-md p-1 shadow-inner">
+                                <i data-feather="chevron-down" id="icon-${groupId}" class="w-4 h-4 transition-transform duration-200"></i>
+                              </button>`;
+            }
 
             const confidenceHtml = isUnknown ? '-' : `<span class="text-sm font-medium text-slate-600">${(log.confidence * 100).toFixed(1)}%</span>`;
 
             const firstSnapshotHtml = log.snapshot_path 
                 ? `<div class="relative group">
                        <img src="/snapshots/${log.snapshot_path}" onclick="openSnapshotModal('/snapshots/${log.snapshot_path}')" class="h-11 w-20 object-cover rounded-md shadow-sm border border-slate-200 cursor-pointer group-hover:scale-105 group-hover:shadow-md group-hover:border-indigo-200 transition-all duration-200" title="First Seen">
-                       <span class="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">FIRST</span>
+                       <span class="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">FIRST</span>
                    </div>` 
                 : `<span class="text-xs text-slate-400">No image</span>`;
                 
             const lastSnapshotHtml = log.last_snapshot_path 
                 ? `<div class="relative group">
                        <img src="/snapshots/${log.last_snapshot_path}" onclick="openSnapshotModal('/snapshots/${log.last_snapshot_path}')" class="h-11 w-20 object-cover rounded-md shadow-sm border border-slate-200 cursor-pointer group-hover:scale-105 group-hover:shadow-md group-hover:border-indigo-200 transition-all duration-200" title="Last Seen">
-                       <span class="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">LAST</span>
+                       <span class="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">LAST</span>
                    </div>` 
                 : '';
 
-            const arrowHtml = log.last_snapshot_path 
+            const arrowHtml = (log.last_snapshot_path && log.snapshot_path !== log.last_snapshot_path)
                 ? `<div class="text-slate-300 flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></div>` 
                 : '';
 
@@ -178,13 +239,16 @@
             const badgeClass = isUnknown
                 ? 'bg-red-50 text-red-700 border-red-200'
                 : 'bg-emerald-50 text-emerald-700 border-emerald-200';
-            const badgeText = isUnknown ? 'Tidak Dikenal' : 'Hadir';
+            const badgeText = isUnknown ? 'Tidak Dikenal' : (log.is_group && log.sub_logs.length > 1 ? `Hadir <span class="bg-emerald-200 text-emerald-800 rounded px-1 ml-1">${log.sub_logs.length}</span>` : 'Hadir');
 
-            tr.innerHTML = `
+            return `
                 <td class="px-6 py-4">
-                    <div>
-                        <div class="text-sm font-bold text-slate-800">${mainText}</div>
-                        ${subText}
+                    <div class="flex items-start">
+                        ${toggleIcon}
+                        <div>
+                            <div class="text-sm font-bold text-slate-800">${mainText}</div>
+                            ${subText}
+                        </div>
                     </div>
                 </td>
                 <td class="px-6 py-4 text-sm font-medium text-slate-600">${log.cctv ? log.cctv.name : `CCTV #${log.cctv_id}`}</td>
@@ -193,12 +257,88 @@
                 <td class="px-6 py-4 text-sm text-slate-500 font-medium whitespace-nowrap">${firstSeen}</td>
                 <td class="px-6 py-4 text-sm font-bold text-indigo-600 whitespace-nowrap">${lastSeen}</td>
                 <td class="px-6 py-4">
-                    <span class="inline-flex px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full border ${badgeClass}">
+                    <span class="inline-flex items-center px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full border ${badgeClass}">
                         ${badgeText}
                     </span>
                 </td>
             `;
+        }
+
+        paginatedData.forEach((log, index) => {
+            const groupId = `group-${log.lecture_id}-${index}`;
+            const tr = document.createElement('tr');
+            tr.className = "hover:bg-slate-50 transition-colors";
+            
+            // If it has sub_logs, we might want the master row to be clickable
+            if (log.is_group && log.sub_logs && log.sub_logs.length > 1) {
+                tr.className += " cursor-pointer";
+                tr.onclick = (e) => {
+                    // Prevent toggling if clicked on an image
+                    if (e.target.tagName !== 'IMG') {
+                        toggleSubLogs(groupId, e);
+                    }
+                };
+            }
+            
+            tr.innerHTML = createRowHtml(log, groupId);
             tbody.appendChild(tr);
+
+            if (log.is_group && log.sub_logs && log.sub_logs.length > 1) {
+                const subTr = document.createElement('tr');
+                subTr.className = `sub-log-${groupId} hidden bg-slate-50/40`;
+                
+                let timelineHtml = `<td colspan="7" class="p-4 sm:p-6">
+                    <div class="w-full max-w-4xl mx-auto flex flex-col">
+                `;
+
+                log.sub_logs.forEach((subLog, subIndex) => {
+                    const dOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+                    const tOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit' };
+                    const df = new Date(subLog.first_seen);
+                    const dl = new Date(subLog.last_seen);
+                    const timeStr = df.toLocaleTimeString('id-ID', tOptions).replace(/\./g, ':');
+                    const lastTimeStr = dl.toLocaleTimeString('id-ID', tOptions).replace(/\./g, ':');
+                    const dateStr = df.toLocaleDateString('id-ID', dOptions);
+                    
+                    const isLast = subIndex === log.sub_logs.length - 1;
+                    
+                    timelineHtml += `
+                        <div class="flex gap-4 group">
+                            <!-- Timeline Axis -->
+                            <div class="flex flex-col items-center w-6 shrink-0 pt-1.5">
+                                <div class="w-3.5 h-3.5 bg-orange-500 rounded-full ring-4 ring-orange-100 group-hover:scale-110 group-hover:bg-indigo-500 group-hover:ring-indigo-100 transition-all z-10"></div>
+                                ${!isLast ? `<div class="w-0.5 flex-1 bg-slate-200 mt-1"></div>` : `<div class="w-0.5 flex-1 bg-transparent mt-1"></div>`}
+                            </div>
+                            
+                            <!-- Timeline Content Card -->
+                            <div class="flex-1 pb-6">
+                                <div class="flex flex-col sm:flex-row gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-indigo-200 transition-colors">
+                                    <div class="flex-1">
+                                        <div class="flex items-center gap-2 mb-1">
+                                            <h4 class="text-sm font-bold text-slate-800">${timeStr} <span class="text-slate-400 font-medium mx-1">-</span> ${lastTimeStr} WIB</h4>
+                                            <span class="text-[10px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">${dateStr}</span>
+                                        </div>
+                                        <div class="flex items-center gap-1.5 text-sm text-slate-600 mt-2">
+                                            <i data-feather="video" class="w-4 h-4 text-slate-400"></i>
+                                            <span>Detected by <strong>${subLog.cctv ? subLog.cctv.name : 'CCTV'}</strong></span>
+                                            <span class="mx-1 text-slate-300">•</span>
+                                            <span class="${subLog.confidence >= 0.8 ? 'text-emerald-600' : 'text-amber-600'} font-medium">${(subLog.confidence * 100).toFixed(1)}% Confidence</span>
+                                        </div>
+                                    </div>
+                                    <div class="shrink-0 flex flex-wrap gap-2">
+                                        ${subLog.snapshot_path ? `<img src="/snapshots/${subLog.snapshot_path}" class="h-16 w-24 object-cover rounded-lg shadow-sm border border-slate-200 cursor-pointer hover:ring-2 hover:ring-indigo-400 transition-all" onclick="openSnapshotModal('/snapshots/${subLog.snapshot_path}')">` : ''}
+                                        ${(subLog.last_snapshot_path && subLog.last_snapshot_path !== subLog.snapshot_path) ? `<img src="/snapshots/${subLog.last_snapshot_path}" class="h-16 w-24 object-cover rounded-lg shadow-sm border border-slate-200 cursor-pointer hover:ring-2 hover:ring-indigo-400 transition-all" onclick="openSnapshotModal('/snapshots/${subLog.last_snapshot_path}')">` : ''}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                timelineHtml += `</div></td>`;
+                subTr.innerHTML = timelineHtml;
+                tbody.appendChild(subTr);
+            }
         });
         feather.replace();
 
@@ -208,6 +348,27 @@
         document.getElementById('logs-prev-btn').disabled = logsCurrentPage === 1;
         document.getElementById('logs-next-btn').disabled = logsCurrentPage === totalPages;
     }
+
+    window.toggleSubLogs = function(groupId, event) {
+        if (event) {
+            event.stopPropagation();
+        }
+        const rows = document.querySelectorAll(`.sub-log-${groupId}`);
+        const icon = document.getElementById(`icon-${groupId}`);
+        let isHidden = false;
+        rows.forEach(row => {
+            if (row.classList.contains('hidden')) {
+                row.classList.remove('hidden');
+                isHidden = false;
+            } else {
+                row.classList.add('hidden');
+                isHidden = true;
+            }
+        });
+        if (icon) {
+            icon.style.transform = isHidden ? "rotate(0deg)" : "rotate(180deg)";
+        }
+    };
 
     document.addEventListener('DOMContentLoaded', () => {
         fetchLogs();
@@ -246,9 +407,16 @@
         });
 
         document.getElementById('search-input').addEventListener('input', () => {
-            applySearch();
-            logsCurrentPage = 1;
-            renderLogsTable();
+            processLogs();
+        });
+
+        document.getElementById('date-filter').addEventListener('change', () => {
+            processLogs();
+        });
+
+        document.getElementById('group-checkbox').addEventListener('change', (e) => {
+            isGrouped = e.target.checked;
+            processLogs();
         });
 
         // Real-time update function
@@ -256,11 +424,14 @@
             try {
                 const data = await apiFetch('/detection-logs');
                 allLogs = data.sort((a, b) => new Date(b.last_seen) - new Date(a.last_seen));
-                applySearch();
                 
-                // Adjust current page if search filter made it out of bounds
+                // Save current page state
+                const oldPage = logsCurrentPage;
+                processLogs();
+                
+                // Adjust current page if search/grouping made it out of bounds
                 const totalPages = Math.ceil(filteredLogs.length / logsPerPage);
-                if (logsCurrentPage > totalPages && totalPages > 0) logsCurrentPage = totalPages;
+                logsCurrentPage = (oldPage > totalPages && totalPages > 0) ? totalPages : oldPage;
                 
                 renderLogsTable();
             } catch (e) { }

@@ -11,14 +11,16 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ROOT_DIR = os.path.dirname(BASE_DIR)
 MODEL_PATH = os.path.join(ROOT_DIR, "svm_face_classifier.pkl")
 LABEL_ENCODER_PATH = os.path.join(ROOT_DIR, "label_encoder.pkl")
+CENTERS_PATH = os.path.join(ROOT_DIR, "class_centers.pkl")
 
 svm_model = None
 face_analysis = None
 label_encoder = None
+class_centers = None
 
 def initialize_models():
-    # Menginisialisasi model InsightFace, SVM, dan Label Encoder ke dalam memori.
-    global svm_model, face_analysis, label_encoder
+    # Menginisialisasi model InsightFace, SVM, Label Encoder, dan Centroid ke dalam memori.
+    global svm_model, face_analysis, label_encoder, class_centers
     
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -52,9 +54,17 @@ def initialize_models():
             except Exception as e:
                 print(f"Error loading Label Encoder from {LABEL_ENCODER_PATH}: {e}")
 
+        if os.path.exists(CENTERS_PATH):
+            try:
+                with open(CENTERS_PATH, "rb") as f:
+                    class_centers = pickle.load(f)
+                print("Class Centers loaded successfully from disk.")
+            except Exception as e:
+                print(f"Error loading Class Centers from {CENTERS_PATH}: {e}")
+
 def predict_frame(img):
     # Memproses frame gambar untuk mendeteksi wajah dan memprediksi identitasnya.
-    global svm_model, face_analysis, label_encoder
+    global svm_model, face_analysis, label_encoder, class_centers
     
     if face_analysis is None:
         raise HTTPException(
@@ -85,7 +95,12 @@ def predict_frame(img):
         confidence = 0.0
 
         if svm_model is not None and face.embedding is not None:
-            embedding = face.embedding.reshape(1, -1)
+            raw_emb = face.embedding.flatten()
+            norm = np.linalg.norm(raw_emb)
+            if norm > 0:
+                raw_emb = raw_emb / norm
+            embedding = raw_emb.reshape(1, -1)
+            
             try:
                 predicted_label = svm_model.predict(embedding)[0]
                 
@@ -93,7 +108,7 @@ def predict_frame(img):
                 class_index = list(svm_model.classes_).index(predicted_label)
                 confidence = float(probabilities[class_index])
                 
-                CONFIDENCE_THRESHOLD = 0.7
+                CONFIDENCE_THRESHOLD = 0.65
                 
                 if confidence < CONFIDENCE_THRESHOLD:
                     name = "Unknown"
@@ -102,7 +117,6 @@ def predict_frame(img):
                     # Decode label if label_encoder exists
                     if label_encoder is not None:
                         decoded_label = label_encoder.inverse_transform([predicted_label])[0]
-
                         name = str(decoded_label)
                         user_id = None
                     else:

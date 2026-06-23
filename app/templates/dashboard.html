@@ -15,12 +15,7 @@
                 class="px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm text-slate-700 focus:outline-none hidden">
                 <option value="">Loading CCTV...</option>
             </select>
-            <button id="btn-refresh" class="px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-sm font-medium transition-colors" title="Refresh Connection">
-                <div class="flex items-center gap-2">
-                    <i data-feather="refresh-cw" class="w-4 h-4"></i>
-                    <span>Refresh</span>
-                </div>
-            </button>
+
             <button id="btn-fullscreen"
                 class="px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-sm font-medium transition-colors"
                 title="Full Screen">
@@ -62,7 +57,7 @@
                 activeCameras.forEach(cctv => {
                     const opt = document.createElement('option');
                     opt.value = cctv.id;
-                    opt.textContent = `${cctv.name} (${cctv.location})`;
+                    opt.textContent = cctv.name;
                     selector.appendChild(opt);
                 });
 
@@ -175,32 +170,7 @@
             startStream(e.target.value);
         });
 
-        document.getElementById('btn-refresh').addEventListener('click', async (e) => {
-            const selector = document.getElementById('cctv-selector');
-            const cctvId = selector.value;
-            if (!cctvId) {
-                alert("Please select a camera first.");
-                return;
-            }
-            
-            const btn = e.currentTarget;
-            const originalContent = btn.innerHTML;
-            btn.innerHTML = '<div class="flex items-center gap-2"><i data-feather="loader" class="w-4 h-4 animate-spin"></i><span>Refreshing</span></div>';
-            feather.replace();
-            btn.disabled = true;
-            
-            try {
-                await apiFetch(`/cctv/${cctvId}/refresh`, { method: 'POST' });
-                // Reconnect websocket
-                startStream(cctvId);
-            } catch (err) {
-                alert('Failed to refresh camera: ' + err.message);
-            } finally {
-                btn.innerHTML = originalContent;
-                feather.replace();
-                btn.disabled = false;
-            }
-        });
+
 
         document.getElementById('btn-fullscreen').addEventListener('click', () => {
             const streamImg = document.getElementById('stream-img');

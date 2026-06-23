@@ -20,3 +20,11 @@ class LectureResponse(LectureBase):
 
     class Config:
         orm_mode = True
+
+class AttendanceSummary(BaseModel):
+    lecture: LectureResponse
+    status: str
+    first_seen: Optional[datetime] = None
+    last_seen: Optional[datetime] = None
+    snapshot_path: Optional[str] = None
+    cctv_name: Optional[str] = None

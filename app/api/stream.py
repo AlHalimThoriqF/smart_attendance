@@ -75,14 +75,13 @@ async def websocket_stream(websocket: WebSocket, cctv_id: int):
     
     # If the camera isn't running in the background for some reason, try to start it
     # We should fetch its RTSP url to start it if needed.
-    db = SessionLocal()
-    camera = repositories.cctv.get_cctv(db, cctv_id)
-    if camera and camera.status:
-        rtsp = camera.rtsp_url
-        if rtsp.isdigit():
+    from app.config.cctv_config import get_cctv_by_id
+    camera = get_cctv_by_id(cctv_id)
+    if camera and camera['status']:
+        rtsp = camera['rtsp_url']
+        if str(rtsp).isdigit():
             rtsp = int(rtsp)
         BackgroundMonitor.start_camera(cctv_id, rtsp)
-    db.close()
 
     try:
         while True:

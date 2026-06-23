@@ -6,11 +6,10 @@ from sqlalchemy.orm import DeclarativeBase, sessionmaker
 # Load environment variables from .env
 load_dotenv()
 
-# Gunakan SQLite secara paksa untuk aplikasi portabel
+# Gunakan SQLite
 DATABASE_URL = "sqlite:///./smart_attendance.db"
 
 # Create SQLAlchemy engine
-# connect_args={"check_same_thread": False} diperlukan oleh SQLite jika digunakan di multi-threading (seperti AI Background Monitor)
 engine = create_engine(
     DATABASE_URL,
     connect_args={"check_same_thread": False}

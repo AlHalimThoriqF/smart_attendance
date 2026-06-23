@@ -2,9 +2,9 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from app.database.database import engine, Base, SessionLocal
-from app.api import cctv, lectures, stream, auth
+from app.api import cctv, lectures, stream
 from app import pages
-from app.repositories.users import seed_default_user
+
 from app.ai.recognition import initialize_models
 from app.ai.background_monitor import BackgroundMonitor
 import os
@@ -16,16 +16,12 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    docs_url=None,
-    redoc_url=None,
-    openapi_url=None,
     title="Smart Attendance",
-    description="FastAPI for Real-time CCTV Stream processing and Civitas Attendance Monitoring",
+    description="Civitas Attendance Monitoring",
 )
 
 @app.on_event("startup")
 def on_startup():
-    # Wait for database connection
     while True:
         try:
             Base.metadata.create_all(bind=engine)
@@ -38,12 +34,7 @@ def on_startup():
             logger.warning(f"Unexpected error: {e}. Retrying in 5 seconds...")
             time.sleep(5)
 
-    db = SessionLocal()
-    try:
-        seed_default_user(db)
-    finally:
-        db.close()
-        
+
     # Initialize AI models (InsightFace & SVM)
     initialize_models()
     
@@ -69,7 +60,6 @@ app.mount("/snapshots", StaticFiles(directory=snapshots_dir), name="snapshots")
 app.include_router(pages.router)
 
 # Include API and WebSocket routers
-app.include_router(auth.router)
 app.include_router(cctv.router)
 app.include_router(lectures.router)
 app.include_router(lectures.logs_router)

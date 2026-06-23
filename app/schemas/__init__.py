@@ -1,13 +1,7 @@
-from .cctv import CCTVBase, CCTVCreate, CCTVUpdate, CCTVResponse
-from .user import UserBase, UserCreate, UserResponse
-from .lecture import LectureBase, LectureCreate, LectureResponse
+from .lecture import LectureBase, LectureCreate, LectureResponse, AttendanceSummary
 from .detection_log import DetectionLogBase, DetectionLogResponse
-from .auth import Token, TokenData
 
 __all__ = [
-    "CCTVBase", "CCTVCreate", "CCTVUpdate", "CCTVResponse",
-    "UserBase", "UserCreate", "UserResponse",
-    "LectureBase", "LectureCreate", "LectureResponse",
-    "DetectionLogBase", "DetectionLogResponse",
-    "Token", "TokenData"
+    "LectureBase", "LectureCreate", "LectureResponse", "AttendanceSummary",
+    "DetectionLogBase", "DetectionLogResponse"
 ]

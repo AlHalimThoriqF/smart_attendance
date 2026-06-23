@@ -129,7 +129,6 @@
                                 </span>
                             </div>
                             <p class="text-xs text-slate-500">PNG, JPG, JPEG up to 5MB</p>
-                            <p class="text-xs text-red-500 hidden mt-2" id="photo-required-msg">Photo is required for new registration</p>
                         </div>
                     </div>
                 </div>
@@ -161,7 +160,7 @@
 
     async function fetchLectures() {
         try {
-            const data = await apiFetch('/users?_t=' + new Date().getTime());
+            const data = await apiFetch('/civitas?_t=' + new Date().getTime());
             allLectures = data.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
             filteredLectures = [...allLectures];
             lecturesCurrentPage = 1;
@@ -248,10 +247,9 @@
         document.getElementById('lecture-program-studi').value = '';
         document.getElementById('lecture-jabatan-struktural').value = '';
         document.getElementById('lecture-file').value = '';
-        document.getElementById('photo-filename').textContent = 'Upload a file';
+        document.getElementById('photo-filename').textContent = 'Upload a file (optional)';
         
         document.getElementById('lecture-modal-title').textContent = 'Add New Civitas';
-        document.getElementById('photo-required-msg').classList.remove('hidden');
         
         document.getElementById('lecture-modal').classList.remove('hidden');
     }
@@ -272,7 +270,6 @@
         document.getElementById('photo-filename').textContent = 'Upload new file (optional)';
         
         document.getElementById('lecture-modal-title').textContent = 'Edit Civitas';
-        document.getElementById('photo-required-msg').classList.add('hidden');
         
         document.getElementById('lecture-modal').classList.remove('hidden');
     }
@@ -284,10 +281,8 @@
     function updateFileName(input) {
         if (input.files && input.files[0]) {
             document.getElementById('photo-filename').textContent = input.files[0].name;
-            document.getElementById('photo-required-msg').classList.add('hidden');
         } else {
-            document.getElementById('photo-filename').textContent = isEditing ? 'Upload new file (optional)' : 'Upload a file';
-            if (!isEditing) document.getElementById('photo-required-msg').classList.remove('hidden');
+            document.getElementById('photo-filename').textContent = isEditing ? 'Upload new file (optional)' : 'Upload a file (optional)';
         }
     }
 
@@ -308,13 +303,7 @@
         const jabatan_struktural = document.getElementById('lecture-jabatan-struktural').value;
         const fileInput = document.getElementById('lecture-file');
         
-        if (!isEditing && (!fileInput.files || fileInput.files.length === 0)) {
-            document.getElementById('photo-required-msg').classList.remove('hidden');
-            btn.innerHTML = originalText;
-            btn.disabled = false;
-            feather.replace();
-            return;
-        }
+        // Photo validation removed - now optional
 
         const formData = new FormData();
         formData.append('identifier', identifier);
@@ -328,7 +317,7 @@
         }
 
         try {
-            const endpoint = isEditing ? `/users/${id}` : '/users';
+            const endpoint = isEditing ? `/civitas/${id}` : '/civitas';
             const method = isEditing ? 'PUT' : 'POST';
             
             const response = await fetch('/api' + endpoint, {
@@ -361,7 +350,7 @@
         }
 
         try {
-            await apiFetch(`/users/${id}`, { method: 'DELETE' });
+            await apiFetch(`/civitas/${id}`, { method: 'DELETE' });
             fetchLectures();
         } catch (error) {
             alert(error.message);

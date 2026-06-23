@@ -135,7 +135,7 @@
         async function loadUsers() {
             try {
                 // Fetch all registered users
-                const usersRes = await fetch('/api/users');
+                const usersRes = await fetch('/api/civitas');
                 if (!usersRes.ok) throw new Error('Failed to fetch users');
                 const usersData = await usersRes.json();
 
@@ -175,7 +175,7 @@
                             name: user.name,
                             last_snapshot_path: log.last_snapshot_path,
                             last_seen: log.last_seen,
-                            camera: log.cctv ? (log.cctv.location || log.cctv.name) : 'Kamera ' + log.cctv_id,
+                            camera: log.cctv ? log.cctv.name : 'Kamera ' + log.cctv_id,
                             status: 'HADIR'
                         });
                     } else {

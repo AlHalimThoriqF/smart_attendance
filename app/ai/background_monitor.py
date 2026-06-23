@@ -92,18 +92,15 @@ class BackgroundMonitorManager:
             print(f"Background monitoring stopped for CCTV {cctv_id}")
 
     def start_all(self):
-        # Memulai monitoring background untuk semua kamera yang berstatus aktif di database.
-        db = SessionLocal()
-        try:
-            cameras = repositories.cctv.get_all_cctvs(db)
-            for camera in cameras:
-                if camera.status:
-                    rtsp = camera.rtsp_url
-                    if rtsp.isdigit():
-                        rtsp = int(rtsp)
-                    self.start_camera(camera.id, rtsp)
-        finally:
-            db.close()
+        # Memulai monitoring background untuk semua kamera yang berstatus aktif di config.
+        from app.config.cctv_config import get_all_cctvs
+        cameras = get_all_cctvs()
+        for camera in cameras:
+            if camera['status']:
+                rtsp = camera['rtsp_url']
+                if str(rtsp).isdigit():
+                    rtsp = int(rtsp)
+                self.start_camera(camera['id'], rtsp)
 
     def _camera_worker(self, cctv_id, rtsp_url, stop_event):
         # Worker utama untuk membaca stream, melakukan deteksi wajah, tracking, dan logging.
@@ -227,9 +224,8 @@ class BackgroundMonitorManager:
                     thickness = 1
                     (w, h), _ = cv2.getTextSize(label, font, font_scale, thickness)
                     
-                    # Draw black background rectangle for text (high contrast)
-                    cv2.rectangle(frame_copy, (x1, y1 - h - 15), (x1 + w + 10, y1), (0, 0, 0), -1)
-                    
+                    # Draw black outline text for readability without solid background
+                    cv2.putText(frame_copy, label, (x1 + 5, y1 - 6), font, font_scale, (0, 0, 0), thickness + 2)
                     # Draw white text
                     cv2.putText(frame_copy, label, (x1 + 5, y1 - 6), font, font_scale, (255, 255, 255), thickness)
 
@@ -323,7 +319,9 @@ class BackgroundMonitorManager:
                         self.last_logged[(cctv_id, lecture.id)] = current_time
                         self.last_update_time = current_time
 
-                success, encoded_image = cv2.imencode('.jpg', frame_copy)
+                # Resize frame & lower JPEG quality to reduce stream bitrate
+                stream_frame = cv2.resize(frame_copy, (640, int(640 * frame_copy.shape[0] / frame_copy.shape[1])))
+                success, encoded_image = cv2.imencode('.jpg', stream_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 25])
                 if success:
                     jpeg_bytes = encoded_image.tobytes()
                     base64_image = base64.b64encode(jpeg_bytes).decode('utf-8')

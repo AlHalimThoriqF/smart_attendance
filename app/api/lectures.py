@@ -5,9 +5,9 @@ from typing import List, Optional
 from app.database.database import get_db
 from app import schemas
 from app import repositories
-from app.core.security import get_current_user
+from app import schemas, models, repositories
 
-router = APIRouter(prefix="/api/users", tags=["users"])
+router = APIRouter(prefix="/api/civitas", tags=["civitas"])
 logs_router = APIRouter(prefix="/api/detection-logs", tags=["detection-logs"])
 
 @router.get("", response_model=List[schemas.LectureResponse])
@@ -22,9 +22,8 @@ async def register_lecture(
     jabatan: Optional[str] = Form(None),
     program_studi: Optional[str] = Form(None),
     jabatan_struktural: Optional[str] = Form(None),
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    admin=Depends(get_current_user)
+    file: Optional[UploadFile] = File(None),
+    db: Session = Depends(get_db)
 ):
     existing_lecture = repositories.lectures.get_lecture_by_nis(db, identifier)
     if existing_lecture:
@@ -35,23 +34,26 @@ async def register_lecture(
 
     import re
     safe_name = re.sub(r'[\\/*?:"<>|]', "", name).strip()
-    file_extension = os.path.splitext(file.filename)[1] or ".jpg"
-    filename = f"{safe_name}{file_extension}"
+    
+    filename = None
+    if file:
+        file_extension = os.path.splitext(file.filename)[1] or ".jpg"
+        filename = f"{safe_name}{file_extension}"
 
     db_lecture = repositories.lectures.create_lecture(db, identifier, name, gender, jabatan, program_studi, jabatan_struktural, filename)
 
-    file_path = os.path.join(repositories.lectures.FACES_DIR, filename)
-    
-    try:
-        with open(file_path, "wb") as f:
-            content = await file.read()
-            f.write(content)
-    except Exception as e:
-        repositories.lectures.delete_lecture(db, db_lecture)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to write face registration photo to disk: {str(e)}"
-        )
+    if file:
+        file_path = os.path.join(repositories.lectures.FACES_DIR, filename)
+        try:
+            with open(file_path, "wb") as f:
+                content = await file.read()
+                f.write(content)
+        except Exception as e:
+            repositories.lectures.delete_lecture(db, db_lecture)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to write face registration photo to disk: {str(e)}"
+            )
 
     return db_lecture
 
@@ -65,8 +67,7 @@ async def update_lecture(
     program_studi: Optional[str] = Form(None),
     jabatan_struktural: Optional[str] = Form(None),
     file: Optional[UploadFile] = File(None),
-    db: Session = Depends(get_db),
-    admin=Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
     db_lecture = db.query(repositories.lectures.models.Lecture).filter(repositories.lectures.models.Lecture.id == lecture_id).first()
     if not db_lecture:
@@ -137,7 +138,7 @@ async def update_lecture(
     return updated_lecture
 
 @router.delete("/{lecture_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_lecture(lecture_id: int, db: Session = Depends(get_db), admin=Depends(get_current_user)):
+def delete_lecture(lecture_id: int, db: Session = Depends(get_db)):
     db_lecture = db.query(repositories.lectures.models.Lecture).filter(repositories.lectures.models.Lecture.id == lecture_id).first()
     if not db_lecture:
         raise HTTPException(status_code=404, detail="Civitas member not found")
@@ -145,7 +146,99 @@ def delete_lecture(lecture_id: int, db: Session = Depends(get_db), admin=Depends
     repositories.lectures.delete_lecture(db, db_lecture)
     return None
 
+from sqlalchemy import cast, Date
+from datetime import datetime
 
+@router.get("/attendance", response_model=List[schemas.AttendanceSummary])
+def get_attendance(date: str, db: Session = Depends(get_db)):
+    all_lectures = repositories.lectures.get_all_lectures(db)
+    try:
+        target_date = datetime.strptime(date, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.")
+        
+    from app.models.detection_log import DetectionLog
+    from app.config.cctv_config import get_cctv_by_id
+    
+    start_of_day = datetime.combine(target_date, datetime.min.time())
+    end_of_day = datetime.combine(target_date, datetime.max.time())
+    
+    logs_for_date = db.query(DetectionLog).filter(
+        DetectionLog.first_seen >= start_of_day,
+        DetectionLog.first_seen <= end_of_day
+    ).all()
+    
+    attendance_map = {}
+    for log in logs_for_date:
+        if log.lecture_id is None:
+            continue
+        lid = log.lecture_id
+        
+        cctv_info = get_cctv_by_id(log.cctv_id)
+        cctv_name = cctv_info['name'] if cctv_info else f"CCTV #{log.cctv_id}"
+        
+        if lid not in attendance_map:
+            attendance_map[lid] = {
+                "first_seen": log.first_seen,
+                "last_seen": log.last_seen,
+                "snapshot_path": log.snapshot_path,
+                "cctv_name": cctv_name
+            }
+        else:
+            if log.last_seen > attendance_map[lid]["last_seen"]:
+                attendance_map[lid]["last_seen"] = log.last_seen
+                attendance_map[lid]["cctv_name"] = cctv_name
+            if log.first_seen < attendance_map[lid]["first_seen"]:
+                attendance_map[lid]["first_seen"] = log.first_seen
+                attendance_map[lid]["snapshot_path"] = log.snapshot_path
+
+    summaries = []
+    for lec in all_lectures:
+        if lec.id in attendance_map:
+            data = attendance_map[lec.id]
+            summaries.append(
+                schemas.AttendanceSummary(
+                    lecture=schemas.LectureResponse(
+                        id=lec.id,
+                        nis=lec.nis,
+                        name=lec.name,
+                        gender=lec.gender,
+                        jabatan=lec.jabatan,
+                        program_studi=lec.program_studi,
+                        jabatan_struktural=lec.jabatan_struktural,
+                        images=lec.images,
+                        created_at=lec.created_at
+                    ),
+                    status="Hadir",
+                    first_seen=data["first_seen"],
+                    last_seen=data["last_seen"],
+                    snapshot_path=data["snapshot_path"],
+                    cctv_name=data["cctv_name"]
+                )
+            )
+        else:
+            summaries.append(
+                schemas.AttendanceSummary(
+                    lecture=schemas.LectureResponse(
+                        id=lec.id,
+                        nis=lec.nis,
+                        name=lec.name,
+                        gender=lec.gender,
+                        jabatan=lec.jabatan,
+                        program_studi=lec.program_studi,
+                        jabatan_struktural=lec.jabatan_struktural,
+                        images=lec.images,
+                        created_at=lec.created_at
+                    ),
+                    status="Tidak Hadir",
+                    first_seen=None,
+                    last_seen=None,
+                    snapshot_path=None,
+                    cctv_name=None
+                )
+            )
+            
+    return summaries
 
 @logs_router.get("", response_model=List[schemas.DetectionLogResponse])
 def get_all_logs(db: Session = Depends(get_db)):

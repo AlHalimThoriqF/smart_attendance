@@ -3,7 +3,6 @@ from pydantic import BaseModel
 from typing import Optional
 
 from .lecture import LectureResponse
-from .cctv import CCTVResponse
 
 class DetectionLogBase(BaseModel):
     cctv_id: int
@@ -23,7 +22,6 @@ class DetectionLogResponse(BaseModel):
     last_snapshot_path: Optional[str] = None
     crop_snapshot_path: Optional[str] = None
     lecture: LectureResponse
-    cctv: Optional[CCTVResponse] = None
 
     class Config:
         orm_mode = True

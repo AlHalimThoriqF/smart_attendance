@@ -1,32 +1,16 @@
 // API Base URL (since we are serving from the same host, we can use relative paths or root paths)
 const API_BASE = '/api';
 
-// Utility to handle API Requests with Authorization
 async function apiFetch(endpoint, options = {}) {
-    const token = localStorage.getItem('token');
-    
     const headers = {
         'Content-Type': 'application/json',
         ...options.headers
     };
 
-    if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-    }
-
     const response = await fetch(`${API_BASE}${endpoint}`, {
         ...options,
         headers
     });
-
-    if (response.status === 401) {
-        // Unauthorized, clear token and redirect to login
-        localStorage.removeItem('token');
-        if (window.location.pathname !== '/login') {
-            window.location.href = '/login';
-        }
-        throw new Error("Unauthorized");
-    }
 
     if (!response.ok) {
         let errorData = {};
@@ -66,13 +50,3 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-// Logout handler
-function handleLogout() {
-    localStorage.removeItem('token');
-    window.location.href = '/login';
-}
-
-const logoutBtn = document.getElementById('logout-btn');
-if (logoutBtn) {
-    logoutBtn.addEventListener('click', handleLogout);
-}

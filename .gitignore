@@ -20,7 +20,21 @@ alembic/
 
 # SQLite Database
 smart_attendance.db
+smart_attendance.db-shm
+smart_attendance.db-wal
+
 
 app/storage/snapshots/* 
 app/storage/faces/* 
+
+label_encoder.pkl
+svm_face_classifier.pkl
+hasil_deteksi_svm.mp4
+hasil_deteksi_svm2.mp4
+log_deteksi_per_frame.csv
+log_deteksi_per_frame2.csv
+
+svm_face_classifier.pkl
+
+seed_lectures.py
 
