@@ -16,55 +16,9 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: {
-                        sans: ['Inter', 'sans-serif'],
-                    }
-                }
-            }
+            theme: { extend: { fontFamily: { sans: ['Inter', 'sans-serif'], } } }
         }
     </script>
-
-    <!-- Custom CSS (minimal, just for scrollbar) -->
-    <style>
-        ::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
-        }
-
-        ::-webkit-scrollbar-track {
-            background: transparent;
-        }
-
-        ::-webkit-scrollbar-thumb {
-            background: rgba(0, 0, 0, 0.1);
-            border-radius: 4px;
-        }
-
-        ::-webkit-scrollbar-thumb:hover {
-            background: rgba(0, 0, 0, 0.2);
-        }
-
-        .loader {
-            border: 3px solid rgba(0, 0, 0, 0.1);
-            border-top: 3px solid #ea580c;
-            border-radius: 50%;
-            width: 24px;
-            height: 24px;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            0% {
-                transform: rotate(0deg);
-            }
-
-            100% {
-                transform: rotate(360deg);
-            }
-        }
-    </style>
 
     <!-- Feather Icons -->
     <script src="https://unpkg.com/feather-icons"></script>
@@ -83,20 +37,21 @@
         </div>
 
         <nav class="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto">
-            <a href="/live"
+            <a href="/"
                 class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all {% if active_page == 'dashboard' %}bg-orange-50 text-orange-600 border border-orange-100 shadow-sm{% else %}text-slate-500 hover:text-slate-800 hover:bg-slate-50 border border-transparent{% endif %}">
                 <i data-feather="monitor" class="w-4 h-4"></i>
                 <span>Live Dashboard</span>
             </a>
-            <a href="/lectures"
-                class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all {% if active_page == 'lectures' %}bg-orange-50 text-orange-600 border border-orange-100 shadow-sm{% else %}text-slate-500 hover:text-slate-800 hover:bg-slate-50 border border-transparent{% endif %}">
-                <i data-feather="users" class="w-4 h-4"></i>
-                <span>Civitas Management</span>
-            </a>
+
             <a href="/logs"
                 class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all {% if active_page == 'logs' %}bg-orange-50 text-orange-600 border border-orange-100 shadow-sm{% else %}text-slate-500 hover:text-slate-800 hover:bg-slate-50 border border-transparent{% endif %}">
                 <i data-feather="list" class="w-4 h-4"></i>
                 <span>Detection Logs</span>
+            </a>
+            <a href="/upload"
+                class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all {% if active_page == 'upload' %}bg-orange-50 text-orange-600 border border-orange-100 shadow-sm{% else %}text-slate-500 hover:text-slate-800 hover:bg-slate-50 border border-transparent{% endif %}">
+                <i data-feather="upload-cloud" class="w-4 h-4"></i>
+                <span>Upload Rekaman</span>
             </a>
 
         </nav>
@@ -161,5 +116,4 @@
 
     {% block extra_js %}{% endblock %}
 </body>
-
 </html>

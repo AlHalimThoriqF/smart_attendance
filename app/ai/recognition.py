@@ -1,3 +1,4 @@
+
 import os
 import pickle
 import warnings
@@ -5,10 +6,11 @@ import numpy as np
 import cv2
 from insightface.app import FaceAnalysis
 from fastapi import HTTPException, status
-from app.repositories.lectures import FACES_DIR
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ROOT_DIR = os.path.dirname(BASE_DIR)
+FACES_DIR = os.path.join(BASE_DIR, "storage", "faces")
+
 MODEL_PATH = os.path.join(ROOT_DIR, "svm_face_classifier.pkl")
 LABEL_ENCODER_PATH = os.path.join(ROOT_DIR, "label_encoder.pkl")
 CENTERS_PATH = os.path.join(ROOT_DIR, "class_centers.pkl")
@@ -27,10 +29,10 @@ def initialize_models():
         
         try:
             face_analysis = FaceAnalysis(
-                name='buffalo_s',
+                name='buffalo_sc',
                 providers=['CUDAExecutionProvider', 'CPUExecutionProvider']
             )
-            face_analysis.prepare(ctx_id=0, det_size=(640, 640))
+            face_analysis.prepare(ctx_id=0, det_size=(1280, 1280))
             print("InsightFace initialized successfully with execution providers.")
         except Exception as e:
             print(f"Error initializing InsightFace: {e}")
@@ -88,7 +90,15 @@ def predict_frame(img):
 
     for face in faces:
         bbox = face.bbox  # np.array([x1, y1, x2, y2])
-        box = [int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])]
+        
+        # TRIK PENYELAMAT: Paksa koordinat tetap berada di dalam area frame video
+        frame_h, frame_w = img.shape[:2]
+        x1 = max(0, int(bbox[0]))
+        y1 = max(0, int(bbox[1]))
+        x2 = min(frame_w, int(bbox[2]))
+        y2 = min(frame_h, int(bbox[3]))
+        
+        box = [x1, y1, x2, y2]
 
         user_id = None
         name = "Unknown"
@@ -102,18 +112,26 @@ def predict_frame(img):
             embedding = raw_emb.reshape(1, -1)
             
             try:
-                predicted_label = svm_model.predict(embedding)[0]
-                
                 probabilities = svm_model.predict_proba(embedding)[0]
-                class_index = list(svm_model.classes_).index(predicted_label)
-                confidence = float(probabilities[class_index])
+                prob_sorted = np.sort(probabilities)[::-1]
                 
-                CONFIDENCE_THRESHOLD = 0.65
+                max_prob = float(prob_sorted[0])
+                second_prob = float(prob_sorted[1]) if len(prob_sorted) > 1 else 0.0
+                margin = max_prob - second_prob
                 
-                if confidence < CONFIDENCE_THRESHOLD:
+                CONFIDENCE_THRESHOLD = 0.6
+                
+                # Jalankan "Satpam Margin" murni untuk filter per orang
+                if margin < 0.05 or max_prob < CONFIDENCE_THRESHOLD:
                     name = "Unknown"
                     user_id = None
+                    confidence = 0.0 if margin < 0.05 else max_prob
                 else:
+                    confidence = max_prob
+                    # Ambil prediksi nama dari SVM
+                    class_index = np.argmax(probabilities)
+                    predicted_label = svm_model.classes_[class_index]
+                    
                     # Decode label if label_encoder exists
                     if label_encoder is not None:
                         decoded_label = label_encoder.inverse_transform([predicted_label])[0]

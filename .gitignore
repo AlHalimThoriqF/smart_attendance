@@ -24,17 +24,21 @@ smart_attendance.db-shm
 smart_attendance.db-wal
 
 
-app/storage/snapshots/* 
 app/storage/faces/* 
+app/storage/snapshots/* 
+app/storage/videos/* 
 
 label_encoder.pkl
 svm_face_classifier.pkl
 hasil_deteksi_svm.mp4
 hasil_deteksi_svm2.mp4
+hasil_deteksi_svm3.mp4
 log_deteksi_per_frame.csv
 log_deteksi_per_frame2.csv
 
-svm_face_classifier.pkl
 
 seed_lectures.py
 
+svm_face_classifier.pkl
+./svm_face_classifier.pkl
+*.pkl

@@ -1,1 +1,1 @@
-from . import lectures
+from . import logs

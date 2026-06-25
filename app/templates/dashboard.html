@@ -12,8 +12,17 @@
         <div class="flex items-center gap-3 w-full sm:w-auto">
             <span class="text-sm font-medium text-slate-700">Pilih Kamera:</span>
             <select id="cctv-selector"
-                class="px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm text-slate-700 focus:outline-none hidden">
-                <option value="">Loading CCTV...</option>
+                class="px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm text-slate-700 focus:outline-none">
+                {% set has_active = namespace(value=false) %}
+                {% for cctv in cctvs %}
+                    {% if cctv.status %}
+                        <option value="{{ cctv.id }}">{{ cctv.name }}</option>
+                        {% set has_active.value = true %}
+                    {% endif %}
+                {% endfor %}
+                {% if not has_active.value %}
+                    <option value="">No Active CCTV</option>
+                {% endif %}
             </select>
 
             <button id="btn-fullscreen"
@@ -44,40 +53,7 @@
 <script>
     let ws = null;
 
-    async function loadCCTVs() {
-        try {
-            const data = await apiFetch('/cctv');
-            const activeCameras = data.filter(c => c.status);
 
-            const selector = document.getElementById('cctv-selector');
-            selector.classList.remove('hidden');
-            selector.innerHTML = '';
-
-            if (activeCameras.length > 0) {
-                activeCameras.forEach(cctv => {
-                    const opt = document.createElement('option');
-                    opt.value = cctv.id;
-                    opt.textContent = cctv.name;
-                    selector.appendChild(opt);
-                });
-
-                // Auto-start the first active camera
-                selector.value = activeCameras[0].id;
-                startStream(activeCameras[0].id);
-            } else {
-                selector.innerHTML = '<option value="">No Active CCTV</option>';
-                selector.disabled = true;
-                const placeholder = document.getElementById('stream-placeholder');
-                placeholder.innerHTML = `
-                    <i data-feather="video-off" class="w-12 h-12 mb-4 text-red-400 opacity-50"></i>
-                    <p class="text-sm font-medium text-slate-500">No active cameras found</p>
-                `;
-                feather.replace();
-            }
-        } catch (e) {
-            console.error(e);
-        }
-    }
 
 
     let frameTimeout;
@@ -164,7 +140,20 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-        loadCCTVs();
+        const selector = document.getElementById('cctv-selector');
+        if (selector.value) {
+            startStream(selector.value);
+        } else {
+            selector.disabled = true;
+            const placeholder = document.getElementById('stream-placeholder');
+            placeholder.innerHTML = `
+                <i data-feather="video-off" class="w-12 h-12 mb-4 text-red-400 opacity-50"></i>
+                <p class="text-sm font-medium text-slate-500">No active cameras found</p>
+            `;
+            if (typeof feather !== 'undefined') {
+                feather.replace();
+            }
+        }
 
         document.getElementById('cctv-selector').addEventListener('change', (e) => {
             startStream(e.target.value);

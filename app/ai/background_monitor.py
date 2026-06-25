@@ -13,11 +13,12 @@ from app.ai.recognition import predict_frame
 
 class CameraStreamReader:
     def __init__(self, rtsp_url):
-        # Inisialisasi koneksi ke stream RTSP dan mulai thread pembacaan frame.
+        # Inisialisasi koneksi ke stream url dan mulai thread pembacaan frame.
         self.kamera = cv2.VideoCapture(rtsp_url)
         self.ret = False
         self.frame = None
         self.running = True
+        self.is_video_file = isinstance(rtsp_url, str) and not rtsp_url.startswith(('rtsp://', 'http://', 'https://')) and not str(rtsp_url).isdigit()
         
         if self.kamera.isOpened():
             self.ret, self.frame = self.kamera.read()
@@ -33,8 +34,17 @@ class CameraStreamReader:
                 if ret:
                     self.ret = ret
                     self.frame = frame
+                    
+                    # Jika menggunakan rekaman, beri jeda agar video diputar pada 25 FPS (1/25 = 0.04 detik)
+                    if self.is_video_file:
+                        time.sleep(0.04)
                 else:
-                    time.sleep(1)
+                    # Jika video file habis, putar kembali dari awal (Looping)
+                    if self.is_video_file:
+                        self.kamera.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                        time.sleep(0.04)
+                    else:
+                        time.sleep(1) # Tunggu kamera yang mungkin terputus
             else:
                 time.sleep(1)
 
@@ -55,9 +65,9 @@ class BackgroundMonitorManager:
         self.active_threads = {}
         self.stop_events = {}
         self.latest_frames = {} 
-        self.last_logged = {} # Menyimpan waktu terakhir log untuk tiap (cctv_id, lecture_id)
-        self.last_snapshot = {} # Menyimpan kapan terakhir snapshot fisik diambil
-        self.session_uuids = {} # Menyimpan UUID sesi untuk tiap (cctv_id, lecture_id)
+        self.last_logged = {}
+        self.last_snapshot = {} 
+        self.session_uuids = {} 
         self.last_update_time = time.time()
 
     def get_latest_frame(self, cctv_id):
@@ -129,7 +139,7 @@ class BackgroundMonitorManager:
                 # Add timestamp watermark
                 now = datetime.datetime.now()
                 days = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
-                months = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
+                months = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November", "Desember"]
                 day_name = days[now.weekday()]
                 month_name = months[now.month - 1]
                 timestamp_str = f"{day_name}, {now.day:02d} {month_name} {now.year} - {now.strftime('%H:%M:%S')} WIB"
@@ -168,20 +178,11 @@ class BackgroundMonitorManager:
                     for face in cached_faces_detected:
                         if not face.get("box"):
                             continue
-                        user_id = face.get("user_id")
                         name_label = face.get("name", "Unknown")
                         confidence = face.get("confidence", 0.0)
                         
-                        lecture = None
-                        if user_id:
-                            lecture = repositories.lectures.get_lecture_by_id(db, user_id)
-                        elif name_label.lower() != "unknown":
-                            lecture = repositories.lectures.get_lecture_by_name(db, name_label)
-                            
-                        if lecture:
-                            name_label = lecture.name
+                        if name_label.lower() != "unknown":
                             valid_detections.append({
-                                "lecture": lecture,
                                 "confidence": confidence,
                                 "box": face.get("box"),
                                 "name": name_label
@@ -232,8 +233,8 @@ class BackgroundMonitorManager:
                 # Database Logging
                 needs_logging = []
                 for det in cached_valid_detections:
-                    lecture = det["lecture"]
-                    last_time = self.last_logged.get((cctv_id, lecture.id), 0)
+                    person_name = det["name"]
+                    last_time = self.last_logged.get((cctv_id, person_name), 0)
                     if current_time - last_time > 3:
                         needs_logging.append(det)
                         
@@ -242,7 +243,7 @@ class BackgroundMonitorManager:
                     base_snapshot_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "storage", "snapshots")
                     
                     for det in needs_logging:
-                        lecture = det["lecture"]
+                        person_name = det["name"]
                         confidence = det["confidence"]
                         
                         # Zoom to face with padding
@@ -279,16 +280,16 @@ class BackgroundMonitorManager:
                             scale_full = 1280 / width
                             snapshot_frame_full = cv2.resize(snapshot_frame_full, (int(width * scale_full), int(height * scale_full)))
                         
-                        last_snap = self.last_snapshot.get((cctv_id, lecture.id), 0)
+                        last_snap = self.last_snapshot.get((cctv_id, person_name), 0)
                         is_new_session = (current_time - last_snap > 1800)
                         
                         if is_new_session:
-                            self.session_uuids[(cctv_id, lecture.id)] = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                            self.last_snapshot[(cctv_id, lecture.id)] = current_time
+                            self.session_uuids[(cctv_id, person_name)] = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                            self.last_snapshot[(cctv_id, person_name)] = current_time
                             
-                        session_uuid = self.session_uuids.get((cctv_id, lecture.id), datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
+                        session_uuid = self.session_uuids.get((cctv_id, person_name), datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
                         
-                        folder_name = re.sub(r'[\\/*?:"<>|]', "", lecture.name).strip()
+                        folder_name = re.sub(r'[\\/*?:"<>|]', "", person_name).strip()
                         user_snapshot_dir = os.path.join(base_snapshot_dir, folder_name)
                         os.makedirs(user_snapshot_dir, exist_ok=True)
                         
@@ -310,13 +311,18 @@ class BackgroundMonitorManager:
                         last_path_db = f"{folder_name}/{last_filename}"
                         crop_path_db = f"{folder_name}/{last_crop_filename}"
                         
-                        repositories.lectures.create_detection_log(
-                            db, cctv_id, lecture.id, confidence, 
+                        from app.config.cctv_config import get_cctv_by_id
+                        cctv_info = get_cctv_by_id(cctv_id)
+                        cctv_name_db = cctv_info['name'] if cctv_info else None
+                        
+                        repositories.logs.create_detection_log(
+                            db, cctv_id, person_name, confidence, 
                             snapshot_path=first_path_db, 
-                            last_snapshot_path=last_path_db,
-                            crop_snapshot_path=crop_path_db
+                            crop_snapshot_path=crop_path_db,
+                            status="present",
+                            cctv_name=cctv_name_db
                         )
-                        self.last_logged[(cctv_id, lecture.id)] = current_time
+                        self.last_logged[(cctv_id, person_name)] = current_time
                         self.last_update_time = current_time
 
                 # Resize frame & lower JPEG quality to reduce stream bitrate
@@ -332,5 +338,4 @@ class BackgroundMonitorManager:
         finally:
             stream_obj.release()
             db.close()
-
 BackgroundMonitor = BackgroundMonitorManager()

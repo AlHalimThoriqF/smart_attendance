@@ -134,11 +134,6 @@
 
         async function loadUsers() {
             try {
-                // Fetch all registered users
-                const usersRes = await fetch('/api/civitas');
-                if (!usersRes.ok) throw new Error('Failed to fetch users');
-                const usersData = await usersRes.json();
-
                 // Fetch detection logs
                 const logsRes = await fetch('/api/detection-logs');
                 if (!logsRes.ok) throw new Error('Failed to fetch logs');
@@ -149,16 +144,16 @@
                 // Filter logs to today only
                 const todaysLogs = logsData.filter(log => new Date(log.last_seen).toDateString() === todayStr);
 
-                // Map of user_id -> latest log
+                // Map of person_name -> latest log
                 const userLogsMap = {};
 
                 todaysLogs.forEach(log => {
-                    if (log.lecture_id !== null) {
-                        if (!userLogsMap[log.lecture_id]) {
-                            userLogsMap[log.lecture_id] = log;
+                    if (log.person_name !== 'Unknown') {
+                        if (!userLogsMap[log.person_name]) {
+                            userLogsMap[log.person_name] = log;
                         } else {
-                            if (new Date(log.last_seen) > new Date(userLogsMap[log.lecture_id].last_seen)) {
-                                userLogsMap[log.lecture_id] = log;
+                            if (new Date(log.last_seen) > new Date(userLogsMap[log.person_name].last_seen)) {
+                                userLogsMap[log.person_name] = log;
                             }
                         }
                     }
@@ -166,46 +161,25 @@
 
                 let displayItems = [];
 
-                // Add all registered users
-                usersData.forEach(user => {
-                    const log = userLogsMap[user.id];
-                    if (log) {
-                        displayItems.push({
-                            type: 'known',
-                            name: user.name,
-                            last_snapshot_path: log.last_snapshot_path,
-                            last_seen: log.last_seen,
-                            camera: log.cctv ? log.cctv.name : 'Kamera ' + log.cctv_id,
-                            status: 'HADIR'
-                        });
-                    } else {
-                        displayItems.push({
-                            type: 'absent',
-                            name: user.name,
-                            last_snapshot_path: null,
-                            last_seen: null,
-                            camera: '-',
-                            status: 'BELUM TERDETEKSI HARI INI'
-                        });
-                    }
-                });
+                for (const [name, log] of Object.entries(userLogsMap)) {
+                    displayItems.push({
+                        type: 'known',
+                        name: name,
+                        snapshot_path: log.snapshot_path,
+                        crop_snapshot_path: log.crop_snapshot_path,
+                        last_seen: log.last_seen,
+                        camera: log.cctv_name || 'Kamera ' + log.cctv_id,
+                        status: 'HADIR'
+                    });
+                }
 
-                // Sort display items:
-                // 1. HADIR (detected today) sorted by last_seen desc
-                // 2. BELUM TERDETEKSI HARI INI sorted by name
-                displayItems.sort((a, b) => {
-                    if (a.status === 'HADIR' && b.status === 'HADIR') {
-                        return new Date(b.last_seen) - new Date(a.last_seen);
-                    }
-                    if (a.status === 'HADIR') return -1;
-                    if (b.status === 'HADIR') return 1;
-                    return a.name.localeCompare(b.name);
-                });
+                // Sort display items by last_seen desc
+                displayItems.sort((a, b) => new Date(b.last_seen) - new Date(a.last_seen));
 
                 const tbody = document.getElementById('users-table-body');
                 if (displayItems.length > 0) {
                     const html = displayItems.map((item) => {
-                        const cropPath = item.crop_snapshot_path || (item.last_snapshot_path ? item.last_snapshot_path.replace('.jpg', '_crop.jpg') : null);
+                        const cropPath = item.crop_snapshot_path || (item.snapshot_path ? item.snapshot_path.replace('.jpg', '_crop.jpg') : null);
                         const photoUrl = cropPath
                             ? encodeURI('/snapshots/' + cropPath) + '?t=' + new Date().getTime()
                             : 'https://ui-avatars.com/api/?name=' + encodeURIComponent(item.name) + '&background=e2e8f0&color=64748b';

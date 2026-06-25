@@ -40,14 +40,13 @@
                         <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Camera</th>
                         <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-center">Snapshot</th>
                         <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Last Confidence</th>
-                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">First Seen</th>
-                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Last Seen</th>
+                        <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Terakhir Terlihat</th>
                         <th class="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
                     </tr>
                 </thead>
                 <tbody id="logs-table-body" class="divide-y divide-slate-100">
                     <tr>
-                        <td colspan="7" class="px-6 py-8 text-center text-slate-500 font-medium">Loading...</td>
+                        <td colspan="6" class="px-6 py-8 text-center text-slate-500 font-medium">Loading...</td>
                     </tr>
                 </tbody>
             </table>
@@ -107,14 +106,12 @@
 
         if (term) {
             processed = processed.filter(log => {
-                const isUnknown = log.lecture_id === null;
-                const mainText = isUnknown ? 'unknown person' : log.lecture.name.toLowerCase();
-                const subText = !isUnknown ? log.lecture.nis.toLowerCase() : '';
-                const cctvName = (log.cctv ? log.cctv.name : `cctv #${log.cctv_id}`).toLowerCase();
+                const isUnknown = log.person_name === 'Unknown';
+                const mainText = log.person_name.toLowerCase();
+                const cctvName = (log.cctv_name || `cctv #${log.cctv_id}`).toLowerCase();
                 const statusText = isUnknown ? 'tidak dikenal' : 'hadir';
                 
                 return mainText.includes(term) || 
-                       subText.includes(term) || 
                        cctvName.includes(term) ||
                        statusText.includes(term);
             });
@@ -124,7 +121,7 @@
             const groupsMap = {};
             const unknownLogs = [];
             processed.forEach(log => {
-                if (log.lecture_id === null) {
+                if (log.person_name === 'Unknown') {
                     unknownLogs.push(log);
                 } else {
                     const d = new Date(log.first_seen);
@@ -133,7 +130,8 @@
                     const day = String(d.getDate()).padStart(2, '0');
                     const dateStr = `${year}-${month}-${day}`;
                     
-                    const groupKey = `${log.lecture_id}_${dateStr}`;
+                    // Group murni berdasarkan nama orang saja (menggabungkan semua hari)
+                    const groupKey = log.person_name;
                     
                     if (!groupsMap[groupKey]) {
                         groupsMap[groupKey] = [];
@@ -189,22 +187,26 @@
         const paginatedData = filteredLogs.slice(startIndex, endIndex);
 
         function createRowHtml(log, groupId = null) {
-            const isUnknown = log.lecture_id === null;
+            const isUnknown = log.person_name === 'Unknown';
             const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
             const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit' };
             
+            const date = new Date(log.last_seen);
+            const dateStr = date.toLocaleDateString('id-ID', dateOptions);
+            const timeStr = date.toLocaleTimeString('id-ID', timeOptions).replace(/\./g, ':');
+            
             const firstDate = new Date(log.first_seen);
-            const firstDateStr = firstDate.toLocaleDateString('id-ID', dateOptions);
             const firstTimeStr = firstDate.toLocaleTimeString('id-ID', timeOptions).replace(/\./g, ':');
-            const firstSeen = `<div>${firstDateStr}</div><div class="text-xs text-slate-400 mt-0.5 font-normal">${firstTimeStr} WIB</div>`;
+            
+            let timeDisplay = `${timeStr} WIB`;
+            if (timeStr !== firstTimeStr) {
+                timeDisplay = `<span class="text-slate-400 font-normal text-xs mr-1">dari ${firstTimeStr} s/d</span> ${timeStr} WIB`;
+            }
+            
+            const timestampHtml = `<div>${dateStr}</div><div class="text-sm font-bold text-indigo-600 mt-0.5">${timeDisplay}</div>`;
 
-            const lastDate = new Date(log.last_seen);
-            const lastDateStr = lastDate.toLocaleDateString('id-ID', dateOptions);
-            const lastTimeStr = lastDate.toLocaleTimeString('id-ID', timeOptions).replace(/\./g, ':');
-            const lastSeen = `<div>${lastDateStr}</div><div class="text-xs opacity-75 mt-0.5 font-normal">${lastTimeStr} WIB</div>`;
-
-            let mainText = isUnknown ? 'Unknown Person' : log.lecture.name;
-            let subText = !isUnknown ? `<div class="text-xs text-slate-500 mt-0.5">${log.lecture.nis}</div>` : '';
+            let mainText = log.person_name === 'Unknown' ? 'Unknown Person' : log.person_name;
+            let subText = '';
 
             // Group toggle icon
             let toggleIcon = '';
@@ -216,30 +218,16 @@
 
             const confidenceHtml = isUnknown ? '-' : `<span class="text-sm font-medium text-slate-600">${(log.confidence * 100).toFixed(1)}%</span>`;
 
-            const firstSnapshotHtml = log.snapshot_path 
+            const snapshotHtml = log.snapshot_path 
                 ? `<div class="relative group">
-                       <img src="/snapshots/${log.snapshot_path}" onclick="openSnapshotModal('/snapshots/${log.snapshot_path}')" class="h-11 w-20 object-cover rounded-md shadow-sm border border-slate-200 cursor-pointer group-hover:scale-105 group-hover:shadow-md group-hover:border-indigo-200 transition-all duration-200" title="First Seen">
-                       <span class="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">FIRST</span>
+                       <img src="/snapshots/${log.snapshot_path}" onclick="openSnapshotModal('/snapshots/${log.snapshot_path}')" class="h-11 w-20 object-cover rounded-md shadow-sm border border-slate-200 cursor-pointer group-hover:scale-105 group-hover:shadow-md group-hover:border-indigo-200 transition-all duration-200" title="Snapshot">
                    </div>` 
                 : `<span class="text-xs text-slate-400">No image</span>`;
-                
-            const lastSnapshotHtml = log.last_snapshot_path 
-                ? `<div class="relative group">
-                       <img src="/snapshots/${log.last_snapshot_path}" onclick="openSnapshotModal('/snapshots/${log.last_snapshot_path}')" class="h-11 w-20 object-cover rounded-md shadow-sm border border-slate-200 cursor-pointer group-hover:scale-105 group-hover:shadow-md group-hover:border-indigo-200 transition-all duration-200" title="Last Seen">
-                       <span class="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">LAST</span>
-                   </div>` 
-                : '';
 
-            const arrowHtml = (log.last_snapshot_path && log.snapshot_path !== log.last_snapshot_path)
-                ? `<div class="text-slate-300 flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></div>` 
-                : '';
-
-            const snapshotHtml = `<div class="flex items-center justify-center gap-2">${firstSnapshotHtml}${arrowHtml}${lastSnapshotHtml}</div>`;
-
-            const badgeClass = isUnknown
+            const badgeClass = log.person_name === 'Unknown'
                 ? 'bg-red-50 text-red-700 border-red-200'
                 : 'bg-emerald-50 text-emerald-700 border-emerald-200';
-            const badgeText = isUnknown ? 'Tidak Dikenal' : (log.is_group && log.sub_logs.length > 1 ? `Hadir <span class="bg-emerald-200 text-emerald-800 rounded px-1 ml-1">${log.sub_logs.length}</span>` : 'Hadir');
+            const badgeText = log.person_name === 'Unknown' ? 'Tidak Dikenal' : (log.is_group && log.sub_logs.length > 1 ? `Hadir <span class="bg-emerald-200 text-emerald-800 rounded px-1 ml-1">${log.sub_logs.length}</span>` : 'Hadir');
 
             return `
                 <td class="px-6 py-4">
@@ -251,11 +239,10 @@
                         </div>
                     </div>
                 </td>
-                <td class="px-6 py-4 text-sm font-medium text-slate-600">${log.cctv ? log.cctv.name : `CCTV #${log.cctv_id}`}</td>
+                <td class="px-6 py-4 text-sm font-medium text-slate-600">${log.cctv_name || `CCTV #${log.cctv_id}`}</td>
                 <td class="px-6 py-4">${snapshotHtml}</td>
                 <td class="px-6 py-4">${confidenceHtml}</td>
-                <td class="px-6 py-4 text-sm text-slate-500 font-medium whitespace-nowrap">${firstSeen}</td>
-                <td class="px-6 py-4 text-sm font-bold text-indigo-600 whitespace-nowrap">${lastSeen}</td>
+                <td class="px-6 py-4 text-sm text-slate-500 font-medium whitespace-nowrap">${timestampHtml}</td>
                 <td class="px-6 py-4">
                     <span class="inline-flex items-center px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full border ${badgeClass}">
                         ${badgeText}
@@ -265,7 +252,8 @@
         }
 
         paginatedData.forEach((log, index) => {
-            const groupId = `group-${log.lecture_id}-${index}`;
+            const cleanName = log.person_name.replace(/[^a-zA-Z0-9]/g, '');
+            const groupId = `group-${cleanName}-${index}`;
             const tr = document.createElement('tr');
             tr.className = "hover:bg-slate-50 transition-colors";
             
@@ -287,7 +275,7 @@
                 const subTr = document.createElement('tr');
                 subTr.className = `sub-log-${groupId} hidden bg-slate-50/40`;
                 
-                let timelineHtml = `<td colspan="7" class="p-4 sm:p-6">
+                let timelineHtml = `<td colspan="6" class="p-4 sm:p-6">
                     <div class="w-full max-w-4xl mx-auto flex flex-col">
                 `;
 
@@ -320,14 +308,13 @@
                                         </div>
                                         <div class="flex items-center gap-1.5 text-sm text-slate-600 mt-2">
                                             <i data-feather="video" class="w-4 h-4 text-slate-400"></i>
-                                            <span>Detected by <strong>${subLog.cctv ? subLog.cctv.name : 'CCTV'}</strong></span>
+                                            <span>Detected by <strong>${subLog.cctv_name || `CCTV #${subLog.cctv_id}`}</strong></span>
                                             <span class="mx-1 text-slate-300">•</span>
                                             <span class="${subLog.confidence >= 0.8 ? 'text-emerald-600' : 'text-amber-600'} font-medium">${(subLog.confidence * 100).toFixed(1)}% Confidence</span>
                                         </div>
                                     </div>
                                     <div class="shrink-0 flex flex-wrap gap-2">
                                         ${subLog.snapshot_path ? `<img src="/snapshots/${subLog.snapshot_path}" class="h-16 w-24 object-cover rounded-lg shadow-sm border border-slate-200 cursor-pointer hover:ring-2 hover:ring-indigo-400 transition-all" onclick="openSnapshotModal('/snapshots/${subLog.snapshot_path}')">` : ''}
-                                        ${(subLog.last_snapshot_path && subLog.last_snapshot_path !== subLog.snapshot_path) ? `<img src="/snapshots/${subLog.last_snapshot_path}" class="h-16 w-24 object-cover rounded-lg shadow-sm border border-slate-200 cursor-pointer hover:ring-2 hover:ring-indigo-400 transition-all" onclick="openSnapshotModal('/snapshots/${subLog.last_snapshot_path}')">` : ''}
                                     </div>
                                 </div>
                             </div>

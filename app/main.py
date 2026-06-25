@@ -1,10 +1,9 @@
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from app.database.database import engine, Base, SessionLocal
-from app.api import cctv, lectures, stream
+from app.database.database import engine, Base
+from app.api import logs, stream, upload
 from app import pages
-
 from app.ai.recognition import initialize_models
 from app.ai.background_monitor import BackgroundMonitor
 import os
@@ -33,12 +32,8 @@ def on_startup():
         except Exception as e:
             logger.warning(f"Unexpected error: {e}. Retrying in 5 seconds...")
             time.sleep(5)
-
-
     # Initialize AI models (InsightFace & SVM)
     initialize_models()
-    
-    # Start Background Monitoring for all active CCTV cameras
     BackgroundMonitor.start_all()
 
 # Mount static files
@@ -56,11 +51,15 @@ snapshots_dir = os.path.join(BASE_DIR, "storage", "snapshots")
 os.makedirs(snapshots_dir, exist_ok=True)
 app.mount("/snapshots", StaticFiles(directory=snapshots_dir), name="snapshots")
 
+# Mount videos storage
+videos_dir = os.path.join(BASE_DIR, "storage", "videos")
+os.makedirs(videos_dir, exist_ok=True)
+app.mount("/videos", StaticFiles(directory=videos_dir), name="videos")
+
 # Include frontend pages router
 app.include_router(pages.router)
-
 # Include API and WebSocket routers
-app.include_router(cctv.router)
-app.include_router(lectures.router)
-app.include_router(lectures.logs_router)
+
+app.include_router(logs.router)
 app.include_router(stream.router)
+app.include_router(upload.router)
